@@ -13,9 +13,9 @@ CLAUDE_FLAGS = "--dangerously-skip-permissions"
 
 BENCHMARK_ORDER = ["sieve", "towers", "list", "permute", "queens"]
 BENCHMARKS = {
-    "sieve": "10 10000",
-    "towers": "10 300",
-    "list": "10 100",
-    "permute": "10 10000",
-    "queens": "10 3000",
+    "sieve": "20 10000",
+    "towers": "20 300",
+    "list": "20 100",
+    "permute": "20 10000",
+    "queens": "20 3000",
 }
