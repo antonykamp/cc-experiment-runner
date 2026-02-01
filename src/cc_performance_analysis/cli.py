@@ -24,8 +24,8 @@ from cc_performance_analysis.logger import logger
 
 STATE_DIR = Path.cwd().resolve()
 
-start_prompt_file = Path(__file__).parent / "prompts" / "start.txt"
-continue_prompt_file = Path(__file__).parent / "prompts" / "continue.txt"
+start_prompt_file = Path(__file__).parent.parent.parent / "prompts" / "start.txt"
+continue_prompt_file = Path(__file__).parent.parent.parent / "prompts" / "continue.txt"
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(

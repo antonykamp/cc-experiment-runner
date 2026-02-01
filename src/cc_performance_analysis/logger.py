@@ -6,7 +6,7 @@ from datetime import datetime
 def setup_logger(log_dir=None, log_file=None):
     """Sets up and returns a logger instance with a rotating file handler."""
 
-    project_dir = Path(__file__).parent.parent.resolve()
+    project_dir = Path(__file__).parent.parent.parent.resolve()
     log_dir = Path(log_dir) if log_dir else (project_dir / "logs")
     log_dir = log_dir.resolve()
     log_dir.mkdir(parents=True, exist_ok=True)

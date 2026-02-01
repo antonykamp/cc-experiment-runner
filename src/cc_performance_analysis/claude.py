@@ -68,7 +68,7 @@ def run_claude_with_timeout(
         if with_continue:
             logger.info(f"Continuing Claude session")
             cmd = ["claude", "--continue", *CLAUDE_FLAGS.split(), "--plugin-dir",
-                PLUGIN_DIR,"-p", "Please continue"]
+                PLUGIN_DIR,"-p", prompt]
         else:
             cmd = [
                 "claude",
