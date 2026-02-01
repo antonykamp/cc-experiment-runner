@@ -56,6 +56,7 @@ def run_claude_with_timeout(
     prompt: str,
     timeout: int,
     with_continue: bool = False,
+    iteration_timeout: int | None = None,
 ) -> int:
     """Run Claude with timeout management and error detection.
 
@@ -101,9 +102,15 @@ def run_claude_with_timeout(
 
             # Wait for completion with timeout
             wait_start = time.time()
+
+            # Use the more restrictive timeout
+            effective_timeout = timeout
+            if iteration_timeout is not None:
+                effective_timeout = min(timeout, iteration_timeout)
+
             while proc.poll() is None:
-                if time.time() - wait_start >= timeout:
-                    logger.info(f"Timeout reached ({timeout}s elapsed)")
+                if time.time() - wait_start >= effective_timeout:
+                    logger.info(f"Timeout reached ({effective_timeout}s elapsed)")
                     terminate_process(claude_pid, TERMINATION_GRACE_PERIOD)
                     reader.join(timeout=5)
                     return 124

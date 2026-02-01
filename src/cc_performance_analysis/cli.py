@@ -12,7 +12,9 @@ from cc_performance_analysis.benchmarks import run_benchmarks
 from cc_performance_analysis.claude import build_iteration_prompt, run_claude_with_timeout
 from cc_performance_analysis.config import (
     CLEANUP_GRACE_PERIOD,
+    ITERATION_TIMEOUT_SECONDS,
     ITERATIONS_PER_RUN,
+    MAX_RECOVERY_ATTEMPTS,
     TIMEOUT_SECONDS,
     TIMEOUT_WARNING_THRESHOLD,
     TOTAL_RUNS,
@@ -297,44 +299,115 @@ def main() -> None:
                 )
                 break
 
-            
+
             iteration_prompt = build_iteration_prompt(iteration, prompt, run)
 
-            if continue_mode:
-                exit_code = run_claude_with_timeout(
-                    iteration_prompt, remaining, with_continue=True
-                )
-                continue_mode = False  # Only use --continue for the first iteration
-            else:
-                exit_code = run_claude_with_timeout(iteration_prompt, remaining)
+            # Iteration execution with recovery on timeout
+            recovery_attempts = 0
+            iteration_successful = False
 
-            if exit_code == 0:
-                consecutive_failures = 0
-                commit_if_needed(f"Iteration {iteration}: Uncommitted changes cleanup")
-            elif exit_code == 2:
-                _handle_rate_limit(
-                    prefix, run, iteration, baseline_branch, project_dir
-                )
-            elif exit_code == 124:
-                commit_if_needed(f"Iteration {iteration} (timeout): Partial changes")
-                break
-            else:
-                consecutive_failures += 1
-                logger.error(f"Error: Claude exited with code {exit_code}")
-                logger.error(f"Consecutive failures: {consecutive_failures} of {max_consecutive_failures}")
+            while recovery_attempts <= MAX_RECOVERY_ATTEMPTS and not iteration_successful:
+                # Calculate remaining run time
+                elapsed = time.time() - run_start
+                remaining = int(TIMEOUT_SECONDS - elapsed)
 
-                if consecutive_failures >= max_consecutive_failures:
-                    _handle_consecutive_failures(
-                        prefix, run, iteration, baseline_branch,
-                        consecutive_failures, project_dir
+                # Check if we have enough time for this iteration
+                if remaining <= TIMEOUT_WARNING_THRESHOLD:
+                    logger.warning(
+                        f"Warning: Less than {TIMEOUT_WARNING_THRESHOLD}s remaining. "
+                        "Skipping remaining iterations."
+                    )
+                    break  # Exit iteration loop entirely
+
+                # Use --continue on first script resume OR during recovery
+                use_continue = continue_mode or (recovery_attempts > 0)
+
+                # Run Claude with iteration timeout
+                if use_continue:
+                    if recovery_attempts > 0:
+                        logger.info(
+                            f"Self-recovery attempt {recovery_attempts}/{MAX_RECOVERY_ATTEMPTS} "
+                            f"via 'claude --continue'"
+                        )
+                    exit_code = run_claude_with_timeout(
+                        iteration_prompt,
+                        remaining,
+                        with_continue=True,
+                        iteration_timeout=ITERATION_TIMEOUT_SECONDS
+                    )
+                    continue_mode = False
+                else:
+                    exit_code = run_claude_with_timeout(
+                        iteration_prompt,
+                        remaining,
+                        iteration_timeout=ITERATION_TIMEOUT_SECONDS
                     )
 
-                _handle_single_failure(prefix, run, iteration, baseline_branch, branch_name)
-                continue
+                # Handle exit codes
+                if exit_code == 0:
+                    # Success
+                    consecutive_failures = 0
+                    commit_if_needed(f"Iteration {iteration}: Uncommitted changes cleanup")
+                    iteration_successful = True
 
-            logger.info("")
-            logger.info(f"Completed iteration {iteration} at {time.strftime('%c')}")
-            logger.info(f"Branch {branch_name} is ready")
+                elif exit_code == 2:
+                    # Rate limit - exit immediately, no retry
+                    _handle_rate_limit(
+                        prefix, run, iteration, baseline_branch, project_dir
+                    )
+
+                elif exit_code == 124:
+                    # Timeout detected
+                    recovery_attempts += 1
+
+                    if recovery_attempts <= MAX_RECOVERY_ATTEMPTS:
+                        logger.warning(
+                            f"Iteration {iteration} timed out after "
+                            f"{ITERATION_TIMEOUT_SECONDS // 60} minutes"
+                        )
+                        commit_if_needed(
+                            f"Iteration {iteration} (timeout, attempt {recovery_attempts}): "
+                            f"Partial changes before recovery"
+                        )
+                        # Loop continues with use_continue=True
+                    else:
+                        # Exhausted recovery attempts
+                        logger.error(
+                            f"Iteration {iteration} failed after {MAX_RECOVERY_ATTEMPTS} "
+                            f"recovery attempts. Moving to next iteration."
+                        )
+                        commit_if_needed(
+                            f"Iteration {iteration} (timeout, exhausted retries): "
+                            f"Final partial changes"
+                        )
+                        consecutive_failures += 1
+                        break  # Exit recovery loop, move to next iteration
+
+                else:
+                    # Other errors
+                    consecutive_failures += 1
+                    logger.error(f"Error: Claude exited with code {exit_code}")
+                    logger.error(
+                        f"Consecutive failures: {consecutive_failures} of "
+                        f"{max_consecutive_failures}"
+                    )
+
+                    if consecutive_failures >= max_consecutive_failures:
+                        _handle_consecutive_failures(
+                            prefix, run, iteration, baseline_branch,
+                            consecutive_failures, project_dir
+                        )
+
+                    _handle_single_failure(
+                        prefix, run, iteration, baseline_branch, branch_name
+                    )
+                    break  # Exit recovery loop
+
+            # Log completion
+            if iteration_successful:
+                logger.info("")
+                logger.info(f"Completed iteration {iteration} at {time.strftime('%c')}")
+                logger.info(f"Branch {branch_name} is ready")
 
         logger.info("")
         logger.info(f"########## COMPLETED RUN {run} ##########")
