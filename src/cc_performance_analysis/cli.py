@@ -287,6 +287,7 @@ def main() -> None:
                 exit_code = run_claude_with_timeout(
                     iteration_prompt, remaining, with_continue=True
                 )
+                continue_mode = False  # Only use --continue for the first iteration
             else:
                 exit_code = run_claude_with_timeout(iteration_prompt, remaining)
 
