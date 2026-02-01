@@ -1,0 +1,16 @@
+[project]
+name = "cc-performance-analysis"
+version = "0.1.0"
+description = "Autonomous Claude Code performance analysis runner"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+cc-perf-analysis = "cc_performance_analysis.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cc_performance_analysis"]
