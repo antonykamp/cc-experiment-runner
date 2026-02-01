@@ -236,10 +236,10 @@ def main() -> None:
     _print_header(prefix, baseline_branch, continue_mode, start_run, start_iteration)
 
     for run in range(start_run, TOTAL_RUNS + 1):
-        logger.info()
+        logger.info("")
         logger.info(f"########## STARTING RUN {run} of {TOTAL_RUNS} ##########")
         logger.info(f"Time: {time.strftime('%c')}")
-        logger.info()
+        logger.info("")
 
         local_start_iteration = start_iteration if run == start_run else 1
 
@@ -258,11 +258,11 @@ def main() -> None:
         for iteration in range(local_start_iteration, ITERATIONS_PER_RUN + 1):
             branch_name = f"{prefix}-run-{run}-iteration-{iteration}"
 
-            logger.info()
+            logger.info("")
             logger.info(f"--- Run {run}, Iteration {iteration} ---")
             logger.info(f"Branch: {branch_name}")
             logger.info(f"Started: {time.strftime('%c')}")
-            logger.info()
+            logger.info("")
 
             if branch_exists(branch_name):
                 logger.info(f"Resuming existing branch: {branch_name}")
