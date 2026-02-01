@@ -66,8 +66,8 @@ def _setup_signal_handlers() -> None:
     signal.signal(signal.SIGTERM, cleanup)
 
 
-def _handle_continue(prefix: str) -> tuple[int, int, str, str]:
-    """Handle --continue mode. Returns (start_run, start_iteration, resume_session_id, baseline_branch)."""
+def _handle_continue(prefix: str) -> tuple[int, int, str]:
+    """Handle --continue mode. Returns (start_run, start_iteration, baseline_branch)."""
     state = load_state(prefix, STATE_DIR)
     if state is None:
         logger.error(f"Cannot continue: no saved state for prefix '{prefix}'")
@@ -76,7 +76,6 @@ def _handle_continue(prefix: str) -> tuple[int, int, str, str]:
     baseline_branch = state.baseline_branch
     start_run = state.run
     start_iteration = state.iteration
-    resume_session_id = state.session_id
 
     if start_iteration == 0:
         start_iteration = 1
@@ -97,11 +96,9 @@ def _handle_continue(prefix: str) -> tuple[int, int, str, str]:
         run_git("checkout", baseline_branch)
 
     logger.info(f"Continuing from run {start_run}, iteration {start_iteration}")
-    if resume_session_id:
-        logger.info(f"Will resume Claude session: {resume_session_id}")
     logger.info("")
 
-    return start_run, start_iteration, resume_session_id, baseline_branch
+    return start_run, start_iteration, baseline_branch
 
 
 def _validate_fresh_run(baseline_branch: str) -> None:
@@ -133,21 +130,19 @@ def _handle_rate_limit(
     run: int,
     iteration: int,
     baseline_branch: str,
-    session_id: str,
     directory: str,
 ) -> None:
     logger.info("")
     logger.error("Rate limit or API error detected.")
     logger.info("Keeping current iteration state for resuming...")
     commit_if_needed(f"Iteration {iteration}: Work in progress (rate limit hit)")
-    save_state(prefix, run, iteration, baseline_branch, session_id, STATE_DIR)
+    save_state(prefix, run, iteration, baseline_branch, STATE_DIR)
     logger.info("")
     logger.info(f"Rate limit reached. State saved for resuming iteration {iteration}.")
     logger.info("")
-    if session_id:
-        logger.info("To resume the Claude session directly:")
-        logger.info(f"  claude --continue {session_id}")
-        logger.info("")
+    logger.info("To resume the Claude session directly:")
+    logger.info(f"  claude --continue")
+    logger.info("")
     logger.info(f"To continue the full script (will resume iteration {iteration}):")
     logger.info(f"  cc-perf-analysis --continue {directory} {prefix}")
     sys.exit(3)
@@ -158,25 +153,22 @@ def _handle_consecutive_failures(
     run: int,
     iteration: int,
     baseline_branch: str,
-    session_id: str,
     consecutive_failures: int,
     directory: str,
 ) -> None:
     logger.error("Too many consecutive failures detected.")
     logger.info("Keeping current iteration state for resuming...")
     commit_if_needed(f"Iteration {iteration}: Work in progress (multiple failures)")
-    save_state(prefix, run, iteration, baseline_branch, session_id, STATE_DIR)
+    save_state(prefix, run, iteration, baseline_branch, STATE_DIR)
     logger.info("")
     logger.error("=" * 42)
     logger.error(f"ERROR: Too many consecutive failures ({consecutive_failures}).")
     logger.error("This likely indicates a persistent issue (e.g., rate limit, API error).")
     logger.error("Stopping to prevent infinite retry loop.")
     logger.error("=" * 42)
+    logger.info("To resume the Claude session directly:")
+    logger.info(f"  claude --continue")
     logger.info("")
-    if session_id:
-        logger.info("To resume the Claude session directly:")
-        logger.info(f"  claude --continue {session_id}")
-        logger.info("")
     logger.info(f"To continue the script later (will resume iteration {iteration}):")
     logger.info(f"  cc-perf-analysis --continue {directory} {prefix}")
     sys.exit(4)
@@ -235,16 +227,13 @@ def main() -> None:
 
     start_run = 1
     start_iteration = 1
-    resume_session_id = ""
 
     if continue_mode:
-        start_run, start_iteration, resume_session_id, baseline_branch = _handle_continue(prefix)
+        start_run, start_iteration, baseline_branch = _handle_continue(prefix)
     else:
         _validate_fresh_run(baseline_branch)
 
     _print_header(prefix, baseline_branch, continue_mode, start_run, start_iteration)
-
-    session_id = ""
 
     for run in range(start_run, TOTAL_RUNS + 1):
         logger.info()
@@ -294,20 +283,19 @@ def main() -> None:
             
             iteration_prompt = build_iteration_prompt(iteration, prompt, run)
 
-            if resume_session_id:
-                exit_code, session_id = run_claude_with_timeout(
-                    iteration_prompt, remaining, resume_session_id
+            if continue_mode:
+                exit_code = run_claude_with_timeout(
+                    iteration_prompt, remaining, with_continue=True
                 )
-                resume_session_id = ""
             else:
-                exit_code, session_id = run_claude_with_timeout(iteration_prompt, remaining)
+                exit_code = run_claude_with_timeout(iteration_prompt, remaining)
 
             if exit_code == 0:
                 consecutive_failures = 0
                 commit_if_needed(f"Iteration {iteration}: Uncommitted changes cleanup")
             elif exit_code == 2:
                 _handle_rate_limit(
-                    prefix, run, iteration, baseline_branch, session_id, project_dir
+                    prefix, run, iteration, baseline_branch, project_dir
                 )
             elif exit_code == 124:
                 commit_if_needed(f"Iteration {iteration} (timeout): Partial changes")
@@ -319,7 +307,7 @@ def main() -> None:
 
                 if consecutive_failures >= max_consecutive_failures:
                     _handle_consecutive_failures(
-                        prefix, run, iteration, baseline_branch, session_id,
+                        prefix, run, iteration, baseline_branch,
                         consecutive_failures, project_dir
                     )
 

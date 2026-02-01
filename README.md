@@ -56,7 +56,7 @@ Default settings in `src/cc_performance_analysis/config.py`:
 
 When Claude hits the rate limit:
 
-1. **Script automatically saves state** (branch, iteration, session ID)
+1. **Script automatically saves state** (branch, iteration)
 2. **Changes are committed** as "Work in progress"
 3. **Script pauses** with instructions
 
@@ -72,7 +72,7 @@ The script will:
 
 **Alternative - Manual Claude resume:**
 ```bash
-claude --continue <session-id>  # Session ID shown in output
+claude --continue 
 ```
 
 ## Example Workflow

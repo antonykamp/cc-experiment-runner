@@ -55,21 +55,20 @@ def build_iteration_prompt(iteration: int, base_prompt: str, run: int) -> str:
 def run_claude_with_timeout(
     prompt: str,
     timeout: int,
-    session_id: str = "",
-) -> tuple[int, str]:
+    with_continue: bool = False,
+) -> int:
     """Run Claude with timeout management and error detection.
 
     Returns:
-        A tuple of (exit_code, session_id).
         exit_code: 0=success, 1=error, 2=rate limit, 124=timeout.
     """
     output_file = tempfile.mktemp(suffix=".txt")
-    detected_session_id = session_id
 
     try:
-        if session_id:
-            logger.info(f"Continuing Claude session: {session_id}")
-            cmd = ["claude", "--continue", session_id, "-p", "Please continue"]
+        if with_continue:
+            logger.info(f"Continuing Claude session")
+            cmd = ["claude", "--continue", *CLAUDE_FLAGS.split(), "--plugin-dir",
+                PLUGIN_DIR,"-p", "Please continue"]
         else:
             cmd = [
                 "claude",
@@ -100,11 +99,6 @@ def run_claude_with_timeout(
             reader = threading.Thread(target=stream_output, daemon=True)
             reader.start()
 
-            # Try to extract session ID after a short delay
-            time.sleep(2)
-            if not session_id:
-                detected_session_id = _extract_session_id(output_file)
-
             # Wait for completion with timeout
             wait_start = time.time()
             while proc.poll() is None:
@@ -112,7 +106,7 @@ def run_claude_with_timeout(
                     logger.info(f"Timeout reached ({timeout}s elapsed)")
                     terminate_process(claude_pid, TERMINATION_GRACE_PERIOD)
                     reader.join(timeout=5)
-                    return 124, detected_session_id
+                    return 124
                 time.sleep(1)
 
             reader.join(timeout=5)
@@ -124,7 +118,7 @@ def run_claude_with_timeout(
         if _RATE_LIMIT_PATTERN.search(output_content):
             logger.info("")
             logger.info("Detected rate limit or API error in Claude output.")
-            return 2, detected_session_id
+            return 2
 
         if exit_code != 0 and len(output_content.splitlines()) < 5:
             logger.info("")
@@ -134,33 +128,15 @@ def run_claude_with_timeout(
             )
             if not output_content.strip():
                 logger.info("Empty output with non-zero exit, treating as rate limit.")
-                return 2, detected_session_id
+                return 2
             if re.search(r"error|failed|limit", output_content, re.IGNORECASE):
                 logger.info("Error detected in output, treating as rate limit.")
-                return 2, detected_session_id
+                return 2
 
-        return exit_code, detected_session_id
+        return exit_code
 
     finally:
         try:
             os.unlink(output_file)
         except OSError:
             pass
-
-
-def _extract_session_id(output_file: str) -> str:
-    """Try to extract a Claude session ID from output."""
-    try:
-        content = Path(output_file).read_text()
-    except Exception:
-        return ""
-
-    match = re.search(r"session[_-]?id[:\s]+([a-zA-Z0-9_-]+)", content)
-    if match:
-        return match.group(1)
-
-    match = re.search(
-        r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}",
-        content,
-    )
-    return match.group(0) if match else ""
