@@ -38,6 +38,12 @@ def _parse_args() -> argparse.Namespace:
         help="Resume from saved state",
     )
     parser.add_argument(
+        "--remaining-time",
+        type=int,
+        default=None,
+        help="Remaining timeout in seconds (use with --continue to limit time)",
+    )
+    parser.add_argument(
         "directory",
         help="Path to the project directory where Claude and git operations run",
     )
@@ -52,18 +58,6 @@ def _parse_args() -> argparse.Namespace:
         help="Git branch to use as baseline (default: main)",
     )
     return parser.parse_args()
-
-
-def _setup_signal_handlers() -> None:
-    def cleanup(signum, frame):
-        logger.info("")
-        logger.info("Caught interrupt signal - cleaning up...")
-        subprocess.run(["pkill", "-P", str(os.getpid())], capture_output=True)
-        logger.info("Cleanup complete")
-        sys.exit(130)
-
-    signal.signal(signal.SIGINT, cleanup)
-    signal.signal(signal.SIGTERM, cleanup)
 
 
 def _handle_continue(prefix: str) -> tuple[int, int, str]:
@@ -211,12 +205,11 @@ def main() -> None:
     prefix = args.prefix
     baseline_branch = args.baseline_branch
     continue_mode = args.continue_mode
+    remaining_time_override = args.remaining_time
 
     # Change into the project directory so all git/benchmark/Claude commands run there
     os.chdir(project_dir)
     STATE_DIR = project_dir
-
-    _setup_signal_handlers()
 
     prompt_file = continue_prompt_file if continue_mode else start_prompt_file
     if not prompt_file.exists():
@@ -235,6 +228,21 @@ def main() -> None:
 
     _print_header(prefix, baseline_branch, continue_mode, start_run, start_iteration)
 
+    # Setup signal handlers with state context
+    current_state = {"run": start_run, "iteration": start_iteration}
+
+    def cleanup(signum, frame):
+        logger.info("")
+        logger.info("Caught interrupt signal - saving state...")
+        commit_if_needed(f"Iteration {current_state['iteration']}: Interrupted")
+        save_state(prefix, current_state["run"], current_state["iteration"], baseline_branch, STATE_DIR)
+        subprocess.run(["pkill", "-P", str(os.getpid())], capture_output=True)
+        logger.info("State saved, cleanup complete")
+        sys.exit(130)
+
+    signal.signal(signal.SIGINT, cleanup)
+    signal.signal(signal.SIGTERM, cleanup)
+
     for run in range(start_run, TOTAL_RUNS + 1):
         logger.info("")
         logger.info(f"########## STARTING RUN {run} of {TOTAL_RUNS} ##########")
@@ -251,11 +259,20 @@ def main() -> None:
                 continue
             run_git("reset", "--hard", baseline_branch)
 
-        run_start = time.time()
+        if remaining_time_override and run == start_run:
+            # User specified remaining time - calculate backwards
+            run_start = time.time() - (TIMEOUT_SECONDS - remaining_time_override)
+        else:
+            # Normal case - start timer now
+            run_start = time.time()
         consecutive_failures = 0
         max_consecutive_failures = 2
 
         for iteration in range(local_start_iteration, ITERATIONS_PER_RUN + 1):
+            # Update state for signal handler
+            current_state["run"] = run
+            current_state["iteration"] = iteration
+
             branch_name = f"{prefix}-run-{run}-iteration-{iteration}"
 
             logger.info("")
