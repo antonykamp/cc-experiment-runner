@@ -3,16 +3,20 @@ import os
 from pathlib import Path
 from datetime import datetime
 
-def setup_logger(log_dir=None, log_file=None):
-    """Sets up and returns a logger instance with a rotating file handler."""
+def setup_logger(log_file=None):
+    """Sets up and returns a logger instance with a rotating file handler.
 
-    project_dir = Path(__file__).parent.parent.parent.resolve()
-    log_dir = Path(log_dir) if log_dir else (project_dir / "logs")
-    log_dir = log_dir.resolve()
-    log_dir.mkdir(parents=True, exist_ok=True)
+    Logs are ALWAYS written to the cc-performance-analysis/logs directory
+    regardless of current working directory.
+    """
+
+    # ALWAYS use cc-performance-analysis/logs directory
+    cc_project_dir = Path(__file__).parent.parent.parent.resolve()
+    cc_logs_dir = (cc_project_dir / "logs").resolve()
+    cc_logs_dir.mkdir(parents=True, exist_ok=True)
 
     log_file = log_file or datetime.now().strftime("%Y-%m-%d-%H-%M-%S.log")
-    log_path = log_dir / log_file
+    log_path = cc_logs_dir / log_file
     
     logger = logging.getLogger(__name__)
 
