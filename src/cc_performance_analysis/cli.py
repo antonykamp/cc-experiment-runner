@@ -424,7 +424,10 @@ def main() -> None:
         logger.info(f"########## COMPLETED RUN {run} ##########")
         logger.info("")
 
-        benchmark_output = f"benchmark-results-{prefix}-run-{run}.txt"
+        # Save benchmark results to cc-performance-analysis logs directory
+        cc_logs_dir = Path(__file__).parent.parent.parent / "logs"
+        cc_logs_dir.mkdir(parents=True, exist_ok=True)
+        benchmark_output = str(cc_logs_dir / f"benchmark-results-{prefix}-run-{run}.txt")
         run_benchmarks(benchmark_output, run, prefix)
         logger.info("")
 
