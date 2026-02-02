@@ -26,16 +26,29 @@ uv run cc-perf-analysis <directory> <prefix> [baseline-branch]
 uv run python -m cc_performance_analysis <directory> <prefix> [baseline-branch]
 ```
 
-**Example:**
+**Examples:**
+
 ```bash
+# Run with plugin enabled (default)
 cc-perf-analysis ../byopl24-02 2025-01-30--perf main
+
+# Run without plugin
+cc-perf-analysis --no-plugin ../byopl24-02 2025-01-30--perf main
 ```
 
 ## Parameters
 
+### Positional Arguments
+
 - `directory` - Path to the project directory where Claude and git operations run
 - `prefix` - Unique identifier for this analysis run (used in branch names)
 - `baseline-branch` - (Optional) Git branch to use as baseline (default: `main`)
+
+### Options
+
+- `--continue` - Resume from saved state after interruption or rate limit
+- `--remaining-time <seconds>` - Specify remaining timeout when resuming (use with `--continue`)
+- `--no-plugin` - Run analysis without the plugin (default: with plugin enabled)
 
 ## How It Works
 

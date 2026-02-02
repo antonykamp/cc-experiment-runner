@@ -57,6 +57,7 @@ def run_claude_with_timeout(
     timeout: int,
     with_continue: bool = False,
     iteration_timeout: int | None = None,
+    use_plugin: bool = True,
 ) -> int:
     """Run Claude with timeout management and error detection.
 
@@ -68,17 +69,15 @@ def run_claude_with_timeout(
     try:
         if with_continue:
             logger.info(f"Continuing Claude session")
-            cmd = ["claude", "--continue", *CLAUDE_FLAGS.split(), "--plugin-dir",
-                PLUGIN_DIR,"-p", prompt]
+            cmd = ["claude", "--continue", *CLAUDE_FLAGS.split()]
+            if use_plugin:
+                cmd.extend(["--plugin-dir", PLUGIN_DIR])
+            cmd.extend(["-p", prompt])
         else:
-            cmd = [
-                "claude",
-                *CLAUDE_FLAGS.split(),
-                "--plugin-dir",
-                PLUGIN_DIR,
-                "-p",
-                prompt,
-            ]
+            cmd = ["claude", *CLAUDE_FLAGS.split()]
+            if use_plugin:
+                cmd.extend(["--plugin-dir", PLUGIN_DIR])
+            cmd.extend(["-p", prompt])
 
         with open(output_file, "w") as outf:
             proc = subprocess.Popen(

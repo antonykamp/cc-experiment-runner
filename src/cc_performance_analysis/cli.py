@@ -46,6 +46,13 @@ def _parse_args() -> argparse.Namespace:
         help="Remaining timeout in seconds (use with --continue to limit time)",
     )
     parser.add_argument(
+        "--no-plugin",
+        dest="use_plugin",
+        action="store_false",
+        default=True,
+        help="Run analysis without the plugin (default: with plugin)",
+    )
+    parser.add_argument(
         "directory",
         help="Path to the project directory where Claude and git operations run",
     )
@@ -107,11 +114,12 @@ def _validate_fresh_run(baseline_branch: str) -> None:
         sys.exit(1)
 
 
-def _print_header(prefix: str, baseline_branch: str, continue_mode: bool, start_run: int, start_iteration: int) -> None:
+def _print_header(prefix: str, baseline_branch: str, continue_mode: bool, start_run: int, start_iteration: int, use_plugin: bool) -> None:
     logger.info("=== Claude Code Autonomous Performance Analysis ===")
     logger.info(f"Directory: {STATE_DIR}")
     logger.info(f"Prefix: {prefix}")
     logger.info(f"Baseline: {baseline_branch}")
+    logger.info(f"Plugin: {'enabled' if use_plugin else 'disabled'}")
     logger.info(f"Runs: {TOTAL_RUNS}")
     logger.info(f"Iterations per run: {ITERATIONS_PER_RUN}")
     logger.info(f"Timeout per run: {TIMEOUT_SECONDS // 3600}h")
@@ -208,6 +216,7 @@ def main() -> None:
     baseline_branch = args.baseline_branch
     continue_mode = args.continue_mode
     remaining_time_override = args.remaining_time
+    use_plugin = args.use_plugin
 
     # Change into the project directory so all git/benchmark/Claude commands run there
     os.chdir(project_dir)
@@ -228,7 +237,7 @@ def main() -> None:
     else:
         _validate_fresh_run(baseline_branch)
 
-    _print_header(prefix, baseline_branch, continue_mode, start_run, start_iteration)
+    _print_header(prefix, baseline_branch, continue_mode, start_run, start_iteration, use_plugin)
 
     # Setup signal handlers with state context
     current_state = {"run": start_run, "iteration": start_iteration}
@@ -333,14 +342,16 @@ def main() -> None:
                         iteration_prompt,
                         remaining,
                         with_continue=True,
-                        iteration_timeout=ITERATION_TIMEOUT_SECONDS
+                        iteration_timeout=ITERATION_TIMEOUT_SECONDS,
+                        use_plugin=use_plugin
                     )
                     continue_mode = False
                 else:
                     exit_code = run_claude_with_timeout(
                         iteration_prompt,
                         remaining,
-                        iteration_timeout=ITERATION_TIMEOUT_SECONDS
+                        iteration_timeout=ITERATION_TIMEOUT_SECONDS,
+                        use_plugin=use_plugin
                     )
 
                 # Handle exit codes
