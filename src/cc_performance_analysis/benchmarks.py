@@ -35,7 +35,7 @@ def run_benchmarks(output_file: str, run_num: int, prefix: str) -> bool:
         lines.append(f"--- {benchmark} ---")
         params = BENCHMARKS[benchmark]
         result = subprocess.run(
-            ["./lox", "harness.lox", benchmark, *params.split()],
+            ["./lox", "examples/benchmarks/harness.lox", benchmark, *params.split()],
             capture_output=True,
             text=True,
         )
