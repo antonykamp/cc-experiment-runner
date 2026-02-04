@@ -27,7 +27,7 @@ from cc_performance_analysis.process import terminate_process
 from cc_performance_analysis.logger import logger
 
 _RATE_LIMIT_PATTERN = re.compile(
-    r"No messages returned|promise rejected|rate limit|429"
+    r"No messages returned|promise rejected|rate limit exceeded"
     r"|quota exceeded|too many requests|overloaded_error",
     re.IGNORECASE,
 )
