@@ -422,11 +422,11 @@ def main() -> None:
                 logger.info(f"Completed iteration {iteration} at {time.strftime('%c')}")
                 logger.info(f"Branch {branch_name} is ready")
 
-            clear_claude_memory(project_dir)
-
         logger.info("")
         logger.info(f"########## COMPLETED RUN {run} ##########")
         logger.info("")
+
+        clear_claude_memory(project_dir, prefix, run)
 
         # Save benchmark results to cc-performance-analysis logs directory
         cc_logs_dir = (Path(__file__).parent.parent.parent / "logs").resolve()

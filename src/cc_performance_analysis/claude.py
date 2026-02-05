@@ -33,14 +33,29 @@ _RATE_LIMIT_PATTERN = re.compile(
 )
 
 
-def clear_claude_memory(project_dir: Path) -> None:
-    """Delete Claude Code's auto memory for the given project directory."""
+def clear_claude_memory(project_dir: Path, prefix: str, run: int) -> None:
+    """Copy Claude memory into working directory, commit, then delete it."""
+    import shutil
+
     encoded = "-" + str(project_dir.expanduser().resolve()).replace("/", "-").lstrip("-")
     memory_dir = Path.home() / ".claude" / "projects" / encoded / "memory"
-    if memory_dir.exists():
-        import shutil
-        shutil.rmtree(memory_dir)
-        logger.info(f"Cleared Claude memory at {memory_dir}")
+    if not memory_dir.exists():
+        return
+
+    dest = project_dir / ".claude-memory" / f"{prefix}-run-{run}"
+    dest.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(memory_dir, dest, dirs_exist_ok=True)
+    logger.info(f"Saved Claude memory to {dest}")
+
+    subprocess.run(["git", "add", str(dest)], cwd=project_dir, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", f"Save Claude memory for {prefix} run {run}"],
+        cwd=project_dir,
+        capture_output=True,
+    )
+
+    shutil.rmtree(memory_dir)
+    logger.info(f"Cleared Claude memory at {memory_dir}")
 
 
 def build_iteration_prompt(iteration: int, base_prompt: str, run: int) -> str:
