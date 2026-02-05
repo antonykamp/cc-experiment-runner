@@ -1,0 +1,10 @@
+Task: Analyze and improve the performance of this Lox language implementation. Generate performance issue theories, verify the most critical theory and fix exactly one. Return a summary.
+
+Sidenote: If your changes break the build or tests, fix them before continuing.
+
+Sidenote: Do NOT stop to ask me questions. Make reasonable decisions on your own 
+and continue until the task is complete. If you encounter ambiguity, 
+use your best judgment and document your choices. Only stop if you 
+hit a truly unrecoverable error.
+
+Sidenote: Document your findings and reuse information from previous iterations in the working directory itself only. 

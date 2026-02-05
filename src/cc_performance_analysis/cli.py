@@ -26,7 +26,8 @@ from cc_performance_analysis.logger import logger
 
 STATE_DIR = Path.cwd().resolve()
 
-start_prompt_file = Path(__file__).parent.parent.parent / "prompts" / "start.txt"
+start_prompt_plugin_file = Path(__file__).parent.parent.parent / "prompts" / "start-plugin.txt"
+start_prompt_no_plugin_file = Path(__file__).parent.parent.parent / "prompts" / "start-no-plugin.txt"
 continue_prompt_file = Path(__file__).parent.parent.parent / "prompts" / "continue.txt"
 
 def _parse_args() -> argparse.Namespace:
@@ -222,6 +223,7 @@ def main() -> None:
     os.chdir(project_dir)
     STATE_DIR = project_dir
 
+    start_prompt_file = start_prompt_plugin_file if use_plugin else start_prompt_no_plugin_file
     prompt_file = continue_prompt_file if continue_mode else start_prompt_file
     if not prompt_file.exists():
         logger.error(f"Prompt file '{prompt_file}' not found")
