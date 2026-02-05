@@ -9,4 +9,4 @@ and continue until the task is complete. If you encounter ambiguity,
 use your best judgment and document your choices. Only stop if you 
 hit a truly unrecoverable error.
 
-Sidenote: Document your findings and reuse information from previous iterations. 
+Sidenote: Document your findings and reuse information from previous iterations in the working directory itself only. 
