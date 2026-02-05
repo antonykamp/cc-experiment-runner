@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from cc_performance_analysis.benchmarks import run_benchmarks
-from cc_performance_analysis.claude import build_iteration_prompt, run_claude_with_timeout
+from cc_performance_analysis.claude import build_iteration_prompt, clear_claude_memory, run_claude_with_timeout
 from cc_performance_analysis.config import (
     CLEANUP_GRACE_PERIOD,
     ITERATION_TIMEOUT_SECONDS,
@@ -419,6 +419,8 @@ def main() -> None:
                 logger.info("")
                 logger.info(f"Completed iteration {iteration} at {time.strftime('%c')}")
                 logger.info(f"Branch {branch_name} is ready")
+
+            clear_claude_memory(project_dir)
 
         logger.info("")
         logger.info(f"########## COMPLETED RUN {run} ##########")

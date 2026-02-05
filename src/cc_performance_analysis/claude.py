@@ -33,6 +33,16 @@ _RATE_LIMIT_PATTERN = re.compile(
 )
 
 
+def clear_claude_memory(project_dir: Path) -> None:
+    """Delete Claude Code's auto memory for the given project directory."""
+    encoded = "-" + str(project_dir.expanduser().resolve()).replace("/", "-").lstrip("-")
+    memory_dir = Path.home() / ".claude" / "projects" / encoded / "memory"
+    if memory_dir.exists():
+        import shutil
+        shutil.rmtree(memory_dir)
+        logger.info(f"Cleared Claude memory at {memory_dir}")
+
+
 def build_iteration_prompt(iteration: int, base_prompt: str, run: int) -> str:
     """Build the iteration-specific prompt sent to Claude."""
     parts = [
