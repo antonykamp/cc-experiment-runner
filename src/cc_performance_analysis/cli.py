@@ -317,6 +317,9 @@ def main() -> None:
             recovery_attempts = 0
             iteration_successful = False
 
+            # Track commit before starting iteration for potential revert
+            pre_iteration_commit = run_git("rev-parse", "HEAD").stdout.strip()
+
             while recovery_attempts <= MAX_RECOVERY_ATTEMPTS and not iteration_successful:
                 # Calculate remaining run time
                 elapsed = time.time() - run_start
@@ -370,31 +373,34 @@ def main() -> None:
                     )
 
                 elif exit_code == 124:
-                    # Timeout detected
+                    # Timeout detected - revert and retry same iteration
                     recovery_attempts += 1
 
                     if recovery_attempts <= MAX_RECOVERY_ATTEMPTS:
                         logger.warning(
                             f"Iteration {iteration} timed out after "
-                            f"{ITERATION_TIMEOUT_SECONDS // 60} minutes"
+                            f"{ITERATION_TIMEOUT_SECONDS // 60} minutes "
+                            f"(attempt {recovery_attempts}/{MAX_RECOVERY_ATTEMPTS})"
                         )
-                        commit_if_needed(
-                            f"Iteration {iteration} (timeout, attempt {recovery_attempts}): "
-                            f"Partial changes before recovery"
-                        )
-                        # Loop continues with use_continue=True
+                        # Revert all changes including any commits made during iteration
+                        logger.info(f"Reverting to commit {pre_iteration_commit[:8]} and retrying...")
+                        run_git("reset", "--hard", pre_iteration_commit, check=False)
+                        subprocess.run(["git", "clean", "-fd"], capture_output=True)
+                        # Clear Claude memory before fresh retry
+                        clear_claude_memory(project_dir, prefix, run)
+                        continue_mode = False
                     else:
-                        # Exhausted recovery attempts
+                        # Exhausted recovery attempts - save state and stop
                         logger.error(
                             f"Iteration {iteration} failed after {MAX_RECOVERY_ATTEMPTS} "
-                            f"recovery attempts. Moving to next iteration."
+                            f"retry attempts."
                         )
-                        commit_if_needed(
-                            f"Iteration {iteration} (timeout, exhausted retries): "
-                            f"Final partial changes"
-                        )
-                        consecutive_failures += 1
-                        break  # Exit recovery loop, move to next iteration
+                        logger.error("Saving state and stopping program.")
+                        save_state(prefix, run, iteration, baseline_branch, STATE_DIR)
+                        logger.info("")
+                        logger.info(f"To resume later:")
+                        logger.info(f"  cc-perf-analysis --continue {project_dir} {prefix}")
+                        sys.exit(5)
 
                 else:
                     # Other errors
