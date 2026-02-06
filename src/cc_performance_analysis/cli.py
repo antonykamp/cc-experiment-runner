@@ -333,16 +333,16 @@ def main() -> None:
                     )
                     break  # Exit iteration loop entirely
 
-                # Use --continue on first script resume OR during recovery
-                use_continue = continue_mode or (recovery_attempts > 0)
+                # Use --continue only on first script resume (not on timeout retries)
+                use_continue = continue_mode
 
                 # Run Claude with iteration timeout
+                if recovery_attempts > 0:
+                    logger.info(
+                        f"Retry attempt {recovery_attempts}/{MAX_RECOVERY_ATTEMPTS}"
+                    )
+
                 if use_continue:
-                    if recovery_attempts > 0:
-                        logger.info(
-                            f"Self-recovery attempt {recovery_attempts}/{MAX_RECOVERY_ATTEMPTS} "
-                            f"via 'claude --continue'"
-                        )
                     exit_code = run_claude_with_timeout(
                         iteration_prompt,
                         remaining,
