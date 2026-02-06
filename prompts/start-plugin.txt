@@ -1,4 +1,4 @@
-Task: Analyze and improve the performance of this Lox language implementation. Generate performance issue theories, verify the most critical theory and fix exactly one. Return a summary.
+Task: Analyze and improve the performance of this Lox language implementation. Fix exactly one performance issue fully. Return a summary.
 
 Important: Use the /optimization-workflow-orchestrator skill to drive this process
 
