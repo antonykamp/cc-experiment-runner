@@ -4,7 +4,8 @@ Important: Use the /optimization-workflow-orchestrator skill to drive this proce
 
 Sidenote: If your changes break the build or tests, fix them before continuing.
 
-Sidenote: Do NOT stop to ask me questions or for reviews. Make reasonable decisions on your own 
+Sidenote: Do NOT stop to ask me questions or for reviews. Skip all approvals. 
+Make reasonable decisions on your own 
 and continue until the task is complete. If you encounter ambiguity, 
 use your best judgment and document your choices. Only stop if you 
 hit a truly unrecoverable error.
