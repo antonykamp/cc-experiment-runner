@@ -23,6 +23,8 @@ from cc_performance_analysis.config import (
     STARTUP_DELAY,
     TERMINATION_GRACE_PERIOD,
 )
+
+_PLUGIN_DIR_RESOLVED = str(Path(PLUGIN_DIR).expanduser())
 from cc_performance_analysis.process import terminate_process
 from cc_performance_analysis.logger import logger
 
@@ -96,12 +98,12 @@ def run_claude_with_timeout(
             logger.info(f"Continuing Claude session")
             cmd = ["claude", "--continue", *CLAUDE_FLAGS.split()]
             if use_plugin:
-                cmd.extend(["--plugin-dir", PLUGIN_DIR])
+                cmd.extend(["--plugin-dir", _PLUGIN_DIR_RESOLVED])
             cmd.extend(["-p", prompt])
         else:
             cmd = ["claude", *CLAUDE_FLAGS.split()]
             if use_plugin:
-                cmd.extend(["--plugin-dir", PLUGIN_DIR])
+                cmd.extend(["--plugin-dir", _PLUGIN_DIR_RESOLVED])
             cmd.extend(["-p", prompt])
 
         with open(output_file, "w") as outf:

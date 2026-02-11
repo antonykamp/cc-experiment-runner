@@ -1,7 +1,7 @@
 """Configuration constants for the performance analysis."""
 
 ITERATIONS_PER_RUN = 5
-TOTAL_RUNS = 3
+TOTAL_RUNS = 5
 TIMEOUT_SECONDS = 2 * 60 * 60  # 2 hours
 TIMEOUT_WARNING_THRESHOLD = 60  # seconds
 ITERATION_TIMEOUT_SECONDS = 30 * 60  # 30 minutes per iteration
@@ -10,7 +10,7 @@ STARTUP_DELAY = 1
 TERMINATION_GRACE_PERIOD = 5
 CLEANUP_GRACE_PERIOD = 2
 
-PLUGIN_DIR = "../cc-truffle-performance-plugin"
+PLUGIN_DIR = "~/Projects/hpi-ma/cc-truffle-performance-plugin"
 CLAUDE_FLAGS = "--dangerously-skip-permissions"
 
 BENCHMARK_ORDER = [
