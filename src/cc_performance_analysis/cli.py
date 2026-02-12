@@ -319,6 +319,8 @@ def main() -> None:
 
             # Track commit before starting iteration for potential revert
             pre_iteration_commit = run_git("rev-parse", "HEAD").stdout.strip()
+            # Track elapsed time before iteration for timeout reset on retry
+            pre_iteration_elapsed = time.time() - run_start
 
             while recovery_attempts <= MAX_RECOVERY_ATTEMPTS and not iteration_successful:
                 # Calculate remaining run time
@@ -389,6 +391,8 @@ def main() -> None:
                         # Clear Claude memory before fresh retry
                         clear_claude_memory(project_dir, prefix, run)
                         continue_mode = False
+                        # Reset run timeout to start of this iteration so retries don't count
+                        run_start = time.time() - pre_iteration_elapsed
                     else:
                         # Exhausted recovery attempts - save state and stop
                         logger.error(
