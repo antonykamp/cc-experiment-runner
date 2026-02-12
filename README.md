@@ -58,6 +58,42 @@ cc-perf-analysis --no-plugin ../byopl24-02 2025-01-30--perf main
 4. **Commits changes** automatically with descriptive messages
 5. **Runs benchmarks** at the end of each run
 
+```mermaid
+flowchart TD
+    Start([cc-perf-analysis]) --> RunLoop[/"For each run (1..N)"/]
+
+    RunLoop --> IterLoop[/"For each iteration (1..M)"/]
+
+    IterLoop --> CheckTime{"Enough time<br>remaining?"}
+    CheckTime -- No --> RunBenchmarks
+
+    CheckTime -- Yes --> RunClaude[Run Claude with<br>iteration prompt]
+
+    RunClaude --> ExitCode{Exit code?}
+
+    ExitCode -- "0 (success)" --> Commit[Commit changes]
+    Commit --> NextIter{"More<br>iterations?"}
+
+    ExitCode -- "2 (rate limit)" --> Stop([Stop])
+
+    ExitCode -- "124 (timeout)" --> RetryCheck{"Retries<br>exhausted?"}
+    RetryCheck -- No --> Revert[Revert changes]
+    Revert --> RunClaude
+    RetryCheck -- Yes --> Stop
+
+    ExitCode -- "other error" --> ConsecCheck{"Too many consecutive<br>failures?"}
+    ConsecCheck -- Yes --> Stop
+    ConsecCheck -- No --> SkipIter[Skip iteration]
+    SkipIter --> NextIter
+
+    NextIter -- Yes --> IterLoop
+    NextIter -- No --> RunBenchmarks[Run benchmarks]
+
+    RunBenchmarks --> NextRun{More runs?}
+    NextRun -- Yes --> RunLoop
+    NextRun -- No --> Done([Done])
+```
+
 ## Configuration
 
 Default settings in `src/cc_performance_analysis/config.py`:
