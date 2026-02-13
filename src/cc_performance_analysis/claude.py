@@ -10,7 +10,6 @@ Exit codes:
 import os
 import re
 import subprocess
-import sys
 import tempfile
 import threading
 import time
@@ -118,8 +117,7 @@ def run_claude_with_timeout(
 
             def stream_output() -> None:
                 for line in proc.stdout:
-                    sys.stdout.write(line)
-                    sys.stdout.flush()
+                    logger.info(line.rstrip("\n"))
                     outf.write(line)
                     outf.flush()
 
