@@ -256,6 +256,10 @@ def main() -> None:
     signal.signal(signal.SIGINT, cleanup)
     signal.signal(signal.SIGTERM, cleanup)
 
+    # Setup logs directory for benchmark results
+    cc_logs_dir = (Path(__file__).parent.parent.parent / "logs").resolve()
+    cc_logs_dir.mkdir(parents=True, exist_ok=True)
+
     for run in range(start_run, TOTAL_RUNS + 1):
         logger.info("")
         logger.info(f"########## STARTING RUN {run} of {TOTAL_RUNS} ##########")
@@ -271,6 +275,11 @@ def main() -> None:
                 logger.error(f"Skipping run {run}")
                 continue
             run_git("reset", "--hard", baseline_branch)
+
+        # Run benchmarks before the run (on baseline)
+        benchmark_output_before = str(cc_logs_dir / f"benchmark-results-{prefix}-run-{run}-before.txt")
+        run_benchmarks(benchmark_output_before, run, prefix)
+        logger.info("")
 
         if remaining_time_override and run == start_run:
             # User specified remaining time - calculate backwards
@@ -438,9 +447,6 @@ def main() -> None:
 
         clear_claude_memory(project_dir, prefix, run)
 
-        # Save benchmark results to cc-performance-analysis logs directory
-        cc_logs_dir = (Path(__file__).parent.parent.parent / "logs").resolve()
-        cc_logs_dir.mkdir(parents=True, exist_ok=True)
         benchmark_output = str(cc_logs_dir / f"benchmark-results-{prefix}-run-{run}.txt")
         run_benchmarks(benchmark_output, run, prefix)
         logger.info("")
