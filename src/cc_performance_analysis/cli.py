@@ -11,7 +11,6 @@ from pathlib import Path
 from cc_performance_analysis.benchmarks import run_benchmarks
 from cc_performance_analysis.claude import build_iteration_prompt, clear_claude_memory, run_claude_with_timeout
 from cc_performance_analysis.config import (
-    CLEANUP_GRACE_PERIOD,
     ITERATION_TIMEOUT_SECONDS,
     ITERATIONS_PER_RUN,
     MAX_RECOVERY_ATTEMPTS,
@@ -20,7 +19,6 @@ from cc_performance_analysis.config import (
     TOTAL_RUNS,
 )
 from cc_performance_analysis.git import branch_exists, commit_if_needed, has_uncommitted_changes, run_git
-from cc_performance_analysis.process import terminate_process
 from cc_performance_analysis.state import clear_state, load_state, save_state
 from cc_performance_analysis.logger import logger
 
@@ -91,8 +89,8 @@ def _handle_continue(prefix: str) -> tuple[int, int, str]:
         clear_state(prefix, STATE_DIR)
         sys.exit(0)
 
-    last_branch = f"{prefix}-run-{state.run}-iteration-{state.iteration}"
-    if state.iteration > 0 and branch_exists(last_branch):
+    last_branch = f"{prefix}-run-{state.run}"
+    if branch_exists(last_branch):
         logger.info(f"Resuming from branch: {last_branch}")
         run_git("checkout", last_branch)
     else:
@@ -180,26 +178,11 @@ def _handle_consecutive_failures(
 
 
 def _handle_single_failure(
-    prefix: str,
-    run: int,
+    pre_iteration_commit: str,
     iteration: int,
-    baseline_branch: str,
-    branch_name: str,
 ) -> None:
-    run_git("checkout", "--", ".", check=False)
+    run_git("reset", "--hard", pre_iteration_commit, check=False)
     subprocess.run(["git", "clean", "-fd"], capture_output=True)
-
-    if iteration > 1:
-        prev_branch = f"{prefix}-run-{run}-iteration-{iteration - 1}"
-        result = run_git("checkout", prev_branch, check=False)
-        if result.returncode != 0:
-            run_git("checkout", baseline_branch, check=False)
-    else:
-        result = run_git("checkout", baseline_branch, check=False)
-        if result.returncode != 0:
-            run_git("checkout", "main", check=False)
-
-    run_git("branch", "-D", branch_name, check=False)
     logger.warning(f"Iteration {iteration} skipped due to error at {time.strftime('%c')}")
     logger.info("")
 
@@ -256,9 +239,8 @@ def main() -> None:
     signal.signal(signal.SIGINT, cleanup)
     signal.signal(signal.SIGTERM, cleanup)
 
-    # Setup logs directory for benchmark results
-    cc_logs_dir = (Path(__file__).parent.parent.parent / "logs").resolve()
-    cc_logs_dir.mkdir(parents=True, exist_ok=True)
+    # Setup directory for benchmark CSV results
+    benchmark_dir = str((Path(__file__).parent.parent.parent / "benchmark-results").resolve())
 
     for run in range(start_run, TOTAL_RUNS + 1):
         logger.info("")
@@ -268,6 +250,8 @@ def main() -> None:
 
         local_start_iteration = start_iteration if run == start_run else 1
 
+        branch_name = f"{prefix}-run-{run}"
+
         if local_start_iteration == 1:
             result = run_git("checkout", baseline_branch, check=False)
             if result.returncode != 0:
@@ -275,10 +259,12 @@ def main() -> None:
                 logger.error(f"Skipping run {run}")
                 continue
             run_git("reset", "--hard", baseline_branch)
+            if branch_exists(branch_name):
+                run_git("branch", "-D", branch_name, check=False)
+            run_git("checkout", "-b", branch_name)
 
-        # Run benchmarks before the run (on baseline)
-        benchmark_output_before = str(cc_logs_dir / f"benchmark-results-{prefix}-run-{run}-before.txt")
-        run_benchmarks(benchmark_output_before, run, prefix)
+        # Run benchmarks before the run (iteration 0 = baseline)
+        run_benchmarks(benchmark_dir, prefix, run, iteration=0)
         logger.info("")
 
         if remaining_time_override and run == start_run:
@@ -295,19 +281,10 @@ def main() -> None:
             current_state["run"] = run
             current_state["iteration"] = iteration
 
-            branch_name = f"{prefix}-run-{run}-iteration-{iteration}"
-
             logger.info("")
             logger.info(f"--- Run {run}, Iteration {iteration} ---")
-            logger.info(f"Branch: {branch_name}")
             logger.info(f"Started: {time.strftime('%c')}")
             logger.info("")
-
-            if branch_exists(branch_name):
-                logger.info(f"Resuming existing branch: {branch_name}")
-                run_git("checkout", branch_name)
-            else:
-                run_git("checkout", "-b", branch_name)
 
             elapsed = time.time() - run_start
             remaining = int(TIMEOUT_SECONDS - elapsed)
@@ -325,6 +302,13 @@ def main() -> None:
             # Iteration execution with recovery on timeout
             recovery_attempts = 0
             iteration_successful = False
+
+            # Create a snapshot branch before this iteration starts
+            iter_branch = f"{prefix}--{run}--{iteration}"
+            if branch_exists(iter_branch):
+                run_git("branch", "-D", iter_branch, check=False)
+            run_git("branch", iter_branch)
+            logger.info(f"Created branch {iter_branch}")
 
             # Track commit before starting iteration for potential revert
             pre_iteration_commit = run_git("rev-parse", "HEAD").stdout.strip()
@@ -430,25 +414,21 @@ def main() -> None:
                             consecutive_failures, project_dir
                         )
 
-                    _handle_single_failure(
-                        prefix, run, iteration, baseline_branch, branch_name
-                    )
+                    _handle_single_failure(pre_iteration_commit, iteration)
                     break  # Exit recovery loop
 
-            # Log completion
+            # Log completion and run benchmarks after successful iteration
             if iteration_successful:
                 logger.info("")
                 logger.info(f"Completed iteration {iteration} at {time.strftime('%c')}")
-                logger.info(f"Branch {branch_name} is ready")
+                logger.info("")
+                run_benchmarks(benchmark_dir, prefix, run, iteration=iteration)
 
         logger.info("")
         logger.info(f"########## COMPLETED RUN {run} ##########")
         logger.info("")
 
         clear_claude_memory(project_dir, prefix, run)
-
-        benchmark_output = str(cc_logs_dir / f"benchmark-results-{prefix}-run-{run}.txt")
-        run_benchmarks(benchmark_output, run, prefix)
         logger.info("")
 
     clear_state(prefix, STATE_DIR)
@@ -457,8 +437,7 @@ def main() -> None:
     logger.info("")
     logger.info("=== Analysis Complete ===")
     logger.info("Created branches:")
-    result = run_git("branch", "--list", f"{prefix}-*")
+    result = run_git("branch", "--list", f"{prefix}--*")
     logger.info(result.stdout)
     logger.info("To compare results, use:")
-    logger.info(f"  git diff {baseline_branch}..{prefix}-run-1-iteration-{ITERATIONS_PER_RUN}")
-    logger.info(f"  git log --oneline {prefix}-run-1-iteration-1..{prefix}-run-1-iteration-{ITERATIONS_PER_RUN}")
+    logger.info(f"  git diff {baseline_branch}..{prefix}--1--1")
