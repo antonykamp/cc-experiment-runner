@@ -304,7 +304,7 @@ def main() -> None:
             iteration_successful = False
 
             # Create a snapshot branch before this iteration starts
-            iter_branch = f"{prefix}--{run}--{iteration}"
+            iter_branch = f"{prefix}-run-{run}-iteration-{iteration}"
             if branch_exists(iter_branch):
                 run_git("branch", "-D", iter_branch, check=False)
             run_git("branch", iter_branch)
@@ -437,7 +437,7 @@ def main() -> None:
     logger.info("")
     logger.info("=== Analysis Complete ===")
     logger.info("Created branches:")
-    result = run_git("branch", "--list", f"{prefix}--*")
+    result = run_git("branch", "--list", f"{prefix}-run-*")
     logger.info(result.stdout)
     logger.info("To compare results, use:")
-    logger.info(f"  git diff {baseline_branch}..{prefix}--1--1")
+    logger.info(f"  git diff {baseline_branch}..{prefix}-run-1-iteration-1")
