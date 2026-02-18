@@ -13,6 +13,7 @@ from cc_experiment_runner.claude import build_iteration_prompt, clear_claude_mem
 from cc_experiment_runner.config import (
     ITERATION_TIMEOUT_SECONDS,
     ITERATIONS_PER_RUN,
+    MAX_CONSECUTIVE_FAILURES,
     MAX_RECOVERY_ATTEMPTS,
     TIMEOUT_SECONDS,
     TIMEOUT_WARNING_THRESHOLD,
@@ -21,10 +22,9 @@ from cc_experiment_runner.config import (
 from cc_experiment_runner.git import branch_exists, commit_if_needed, has_uncommitted_changes, run_git
 from cc_experiment_runner.logger import logger
 
-STATE_DIR = Path.cwd().resolve()
-
 start_prompt_plugin_file = Path(__file__).parent.parent.parent / "prompts" / "start-plugin.txt"
 start_prompt_no_plugin_file = Path(__file__).parent.parent.parent / "prompts" / "start-no-plugin.txt"
+
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -55,7 +55,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _validate_fresh_run(baseline_branch: str) -> None:
-    """Validate preconditions for a fresh (non-continue) run."""
+    """Validate preconditions for a fresh run."""
     if has_uncommitted_changes():
         logger.error("Error: Working directory has uncommitted changes. Please commit or stash them first.")
         sys.exit(1)
@@ -64,9 +64,9 @@ def _validate_fresh_run(baseline_branch: str) -> None:
         sys.exit(1)
 
 
-def _print_header(prefix: str, baseline_branch: str, use_plugin: bool) -> None:
+def _print_header(project_dir: Path, prefix: str, baseline_branch: str, use_plugin: bool) -> None:
     logger.info("=== Claude Code Autonomous Performance Analysis ===")
-    logger.info(f"Directory: {STATE_DIR}")
+    logger.info(f"Directory: {project_dir}")
     logger.info(f"Prefix: {prefix}")
     logger.info(f"Baseline: {baseline_branch}")
     logger.info(f"Plugin: {'enabled' if use_plugin else 'disabled'}")
@@ -77,39 +77,31 @@ def _print_header(prefix: str, baseline_branch: str, use_plugin: bool) -> None:
     logger.info("")
 
 
-def _handle_rate_limit(run: int, iteration: int) -> None:
-    logger.info("")
-    logger.error("Rate limit or API error detected.")
-    logger.error(f"Stopping at run {run}, iteration {iteration}.")
-    sys.exit(3)
+def _run_build(label: str) -> None:
+    """Run a Maven clean build and log warnings on failure."""
+    logger.info(f"Running clean build {label}...")
+    build = subprocess.run(
+        ["./mvnw", "clean", "package"], capture_output=True, text=True
+    )
+    if build.returncode != 0:
+        logger.warning(f"Clean build failed {label}")
+        logger.info(build.stdout)
+        logger.info(build.stderr)
 
 
-def _handle_consecutive_failures(
-    run: int,
-    iteration: int,
-    consecutive_failures: int,
-) -> None:
-    logger.info("")
-    logger.error("=" * 42)
-    logger.error(f"ERROR: Too many consecutive failures ({consecutive_failures}).")
-    logger.error("This likely indicates a persistent issue (e.g., rate limit, API error).")
-    logger.error(f"Stopping at run {run}, iteration {iteration}.")
-    logger.error("=" * 42)
-    sys.exit(4)
-
-
-def _handle_single_failure(
-    pre_iteration_commit: str,
-    iteration: int,
-) -> None:
-    run_git("reset", "--hard", pre_iteration_commit, check=False)
-    subprocess.run(["git", "clean", "-fd"], capture_output=True)
-    logger.warning(f"Iteration {iteration} skipped due to error at {time.strftime('%c')}")
-    logger.info("")
+def _check_remaining_time(run_start: float) -> int | None:
+    """Return remaining seconds, or None if too little time left."""
+    remaining = int(TIMEOUT_SECONDS - (time.time() - run_start))
+    if remaining <= TIMEOUT_WARNING_THRESHOLD:
+        logger.warning(
+            f"Warning: Less than {TIMEOUT_WARNING_THRESHOLD}s remaining. "
+            "Skipping remaining iterations."
+        )
+        return None
+    return remaining
 
 
 def main() -> None:
-    global STATE_DIR
     args = _parse_args()
 
     project_dir = Path(args.directory).resolve()
@@ -123,7 +115,6 @@ def main() -> None:
 
     # Change into the project directory so all git/benchmark/Claude commands run there
     os.chdir(project_dir)
-    STATE_DIR = project_dir
 
     start_prompt_file = start_prompt_plugin_file if use_plugin else start_prompt_no_plugin_file
     if not start_prompt_file.exists():
@@ -133,7 +124,7 @@ def main() -> None:
     prompt = start_prompt_file.read_text()
 
     _validate_fresh_run(baseline_branch)
-    _print_header(prefix, baseline_branch, use_plugin)
+    _print_header(project_dir, prefix, baseline_branch, use_plugin)
 
     def cleanup(signum, frame):
         logger.info("")
@@ -164,15 +155,7 @@ def main() -> None:
             run_git("branch", "-D", branch_name, check=False)
         run_git("checkout", "-b", branch_name)
 
-        # Clean build after checking out baseline
-        logger.info("Running clean build after baseline checkout...")
-        build = subprocess.run(
-            ["./mvnw", "clean", "package"], capture_output=True, text=True
-        )
-        if build.returncode != 0:
-            logger.warning("Clean build failed after baseline checkout")
-            logger.info(build.stdout)
-            logger.info(build.stderr)
+        _run_build("after baseline checkout")
 
         # Run benchmarks before the run (iteration 0 = baseline)
         run_benchmarks(benchmark_dir, prefix, run, iteration=0)
@@ -180,7 +163,6 @@ def main() -> None:
 
         run_start = time.time()
         consecutive_failures = 0
-        max_consecutive_failures = 2
 
         for iteration in range(1, ITERATIONS_PER_RUN + 1):
             logger.info("")
@@ -188,14 +170,7 @@ def main() -> None:
             logger.info(f"Started: {time.strftime('%c')}")
             logger.info("")
 
-            elapsed = time.time() - run_start
-            remaining = int(TIMEOUT_SECONDS - elapsed)
-
-            if remaining <= TIMEOUT_WARNING_THRESHOLD:
-                logger.warning(
-                    f"Warning: Less than {TIMEOUT_WARNING_THRESHOLD}s remaining. "
-                    "Skipping remaining iterations."
-                )
+            if _check_remaining_time(run_start) is None:
                 break
 
             iteration_prompt = build_iteration_prompt(iteration, prompt, run)
@@ -221,17 +196,9 @@ def main() -> None:
             pre_iteration_elapsed = time.time() - run_start
 
             while recovery_attempts <= MAX_RECOVERY_ATTEMPTS and not iteration_successful:
-                # Calculate remaining run time
-                elapsed = time.time() - run_start
-                remaining = int(TIMEOUT_SECONDS - elapsed)
-
-                # Check if we have enough time for this iteration
-                if remaining <= TIMEOUT_WARNING_THRESHOLD:
-                    logger.warning(
-                        f"Warning: Less than {TIMEOUT_WARNING_THRESHOLD}s remaining. "
-                        "Skipping remaining iterations."
-                    )
-                    break  # Exit iteration loop entirely
+                remaining = _check_remaining_time(run_start)
+                if remaining is None:
+                    break
 
                 # Run Claude with iteration timeout
                 if recovery_attempts > 0:
@@ -255,7 +222,10 @@ def main() -> None:
 
                 elif exit_code == 2:
                     # Rate limit - exit immediately, no retry
-                    _handle_rate_limit(run, iteration)
+                    logger.info("")
+                    logger.error("Rate limit or API error detected.")
+                    logger.error(f"Stopping at run {run}, iteration {iteration}.")
+                    sys.exit(3)
 
                 elif exit_code == 124:
                     # Timeout detected - revert and retry same iteration
@@ -289,15 +259,22 @@ def main() -> None:
                     logger.error(f"Error: Claude exited with code {exit_code}")
                     logger.error(
                         f"Consecutive failures: {consecutive_failures} of "
-                        f"{max_consecutive_failures}"
+                        f"{MAX_CONSECUTIVE_FAILURES}"
                     )
 
-                    if consecutive_failures >= max_consecutive_failures:
-                        _handle_consecutive_failures(
-                            run, iteration, consecutive_failures
-                        )
+                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                        logger.info("")
+                        logger.error("=" * 42)
+                        logger.error(f"ERROR: Too many consecutive failures ({consecutive_failures}).")
+                        logger.error("This likely indicates a persistent issue (e.g., rate limit, API error).")
+                        logger.error(f"Stopping at run {run}, iteration {iteration}.")
+                        logger.error("=" * 42)
+                        sys.exit(4)
 
-                    _handle_single_failure(pre_iteration_commit, iteration)
+                    run_git("reset", "--hard", pre_iteration_commit, check=False)
+                    subprocess.run(["git", "clean", "-fd"], capture_output=True)
+                    logger.warning(f"Iteration {iteration} skipped due to error at {time.strftime('%c')}")
+                    logger.info("")
                     break  # Exit recovery loop
 
             # Log completion and run benchmarks after successful iteration
@@ -316,15 +293,7 @@ def main() -> None:
 
     run_git("checkout", baseline_branch)
 
-    # Clean build after final baseline checkout
-    logger.info("Running clean build after baseline checkout...")
-    build = subprocess.run(
-        ["./mvnw", "clean", "package"], capture_output=True, text=True
-    )
-    if build.returncode != 0:
-        logger.warning("Clean build failed after baseline checkout")
-        logger.info(build.stdout)
-        logger.info(build.stderr)
+    _run_build("after final baseline checkout")
 
     logger.info("")
     logger.info("=== Analysis Complete ===")

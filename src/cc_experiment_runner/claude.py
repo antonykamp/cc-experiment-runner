@@ -9,6 +9,7 @@ Exit codes:
 
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -36,8 +37,6 @@ _RATE_LIMIT_PATTERN = re.compile(
 
 def clear_claude_memory(project_dir: Path, prefix: str, run: int) -> None:
     """Copy Claude memory into working directory, commit, then delete it."""
-    import shutil
-
     encoded = "-" + str(project_dir.expanduser().resolve()).replace("/", "-").lstrip("-")
     memory_dir = Path.home() / ".claude" / "projects" / encoded / "memory"
     if not memory_dir.exists():
