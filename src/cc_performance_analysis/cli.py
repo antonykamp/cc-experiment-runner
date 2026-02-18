@@ -263,6 +263,16 @@ def main() -> None:
                 run_git("branch", "-D", branch_name, check=False)
             run_git("checkout", "-b", branch_name)
 
+            # Clean build after checking out baseline
+            logger.info("Running clean build after baseline checkout...")
+            build = subprocess.run(
+                ["./mvnw", "clean", "package"], capture_output=True, text=True
+            )
+            if build.returncode != 0:
+                logger.warning("Clean build failed after baseline checkout")
+                logger.info(build.stdout)
+                logger.info(build.stderr)
+
         # Run benchmarks before the run (iteration 0 = baseline)
         run_benchmarks(benchmark_dir, prefix, run, iteration=0)
         logger.info("")
@@ -433,6 +443,16 @@ def main() -> None:
 
     clear_state(prefix, STATE_DIR)
     run_git("checkout", baseline_branch)
+
+    # Clean build after final baseline checkout
+    logger.info("Running clean build after baseline checkout...")
+    build = subprocess.run(
+        ["./mvnw", "clean", "package"], capture_output=True, text=True
+    )
+    if build.returncode != 0:
+        logger.warning("Clean build failed after baseline checkout")
+        logger.info(build.stdout)
+        logger.info(build.stderr)
 
     logger.info("")
     logger.info("=== Analysis Complete ===")
