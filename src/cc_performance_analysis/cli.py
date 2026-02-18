@@ -19,30 +19,16 @@ from cc_performance_analysis.config import (
     TOTAL_RUNS,
 )
 from cc_performance_analysis.git import branch_exists, commit_if_needed, has_uncommitted_changes, run_git
-from cc_performance_analysis.state import clear_state, load_state, save_state
 from cc_performance_analysis.logger import logger
 
 STATE_DIR = Path.cwd().resolve()
 
 start_prompt_plugin_file = Path(__file__).parent.parent.parent / "prompts" / "start-plugin.txt"
 start_prompt_no_plugin_file = Path(__file__).parent.parent.parent / "prompts" / "start-no-plugin.txt"
-continue_prompt_file = Path(__file__).parent.parent.parent / "prompts" / "continue.txt"
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Autonomous Claude Code Performance Analysis",
-    )
-    parser.add_argument(
-        "--continue",
-        dest="continue_mode",
-        action="store_true",
-        help="Resume from saved state",
-    )
-    parser.add_argument(
-        "--remaining-time",
-        type=int,
-        default=None,
-        help="Remaining timeout in seconds (use with --continue to limit time)",
     )
     parser.add_argument(
         "--no-plugin",
@@ -68,41 +54,6 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _handle_continue(prefix: str) -> tuple[int, int, str]:
-    """Handle --continue mode. Returns (start_run, start_iteration, baseline_branch)."""
-    state = load_state(prefix, STATE_DIR)
-    if state is None:
-        logger.error(f"Cannot continue: no saved state for prefix '{prefix}'")
-        sys.exit(1)
-
-    baseline_branch = state.baseline_branch
-    start_run = state.run
-    start_iteration = state.iteration
-
-    if start_iteration == 0:
-        start_iteration = 1
-    if start_iteration > ITERATIONS_PER_RUN:
-        start_run += 1
-        start_iteration = 1
-    if start_run > TOTAL_RUNS:
-        logger.info("All runs already completed. Nothing to continue.")
-        clear_state(prefix, STATE_DIR)
-        sys.exit(0)
-
-    last_branch = f"{prefix}-run-{state.run}-iteration-{state.iteration}"
-    if branch_exists(last_branch):
-        logger.info(f"Resuming from branch: {last_branch}")
-        run_git("checkout", last_branch)
-    else:
-        logger.info(f"Resuming from baseline: {baseline_branch}")
-        run_git("checkout", baseline_branch)
-
-    logger.info(f"Continuing from run {start_run}, iteration {start_iteration}")
-    logger.info("")
-
-    return start_run, start_iteration, baseline_branch
-
-
 def _validate_fresh_run(baseline_branch: str) -> None:
     """Validate preconditions for a fresh (non-continue) run."""
     if has_uncommitted_changes():
@@ -113,7 +64,7 @@ def _validate_fresh_run(baseline_branch: str) -> None:
         sys.exit(1)
 
 
-def _print_header(prefix: str, baseline_branch: str, continue_mode: bool, start_run: int, start_iteration: int, use_plugin: bool) -> None:
+def _print_header(prefix: str, baseline_branch: str, use_plugin: bool) -> None:
     logger.info("=== Claude Code Autonomous Performance Analysis ===")
     logger.info(f"Directory: {STATE_DIR}")
     logger.info(f"Prefix: {prefix}")
@@ -122,58 +73,28 @@ def _print_header(prefix: str, baseline_branch: str, continue_mode: bool, start_
     logger.info(f"Runs: {TOTAL_RUNS}")
     logger.info(f"Iterations per run: {ITERATIONS_PER_RUN}")
     logger.info(f"Timeout per run: {TIMEOUT_SECONDS // 3600}h")
-    if continue_mode:
-        logger.info(f"Mode: CONTINUE (from run {start_run}, iteration {start_iteration})")
     logger.info("=" * 50)
     logger.info("")
 
 
-def _handle_rate_limit(
-    prefix: str,
-    run: int,
-    iteration: int,
-    baseline_branch: str,
-    directory: str,
-) -> None:
+def _handle_rate_limit(run: int, iteration: int) -> None:
     logger.info("")
     logger.error("Rate limit or API error detected.")
-    logger.info("Keeping current iteration state for resuming...")
-    commit_if_needed(f"Iteration {iteration}: Work in progress (rate limit hit)")
-    save_state(prefix, run, iteration, baseline_branch, STATE_DIR)
-    logger.info("")
-    logger.info(f"Rate limit reached. State saved for resuming iteration {iteration}.")
-    logger.info("")
-    logger.info("To resume the Claude session directly:")
-    logger.info(f"  claude --continue")
-    logger.info("")
-    logger.info(f"To continue the full script (will resume iteration {iteration}):")
-    logger.info(f"  cc-perf-analysis --continue {directory} {prefix}")
+    logger.error(f"Stopping at run {run}, iteration {iteration}.")
     sys.exit(3)
 
 
 def _handle_consecutive_failures(
-    prefix: str,
     run: int,
     iteration: int,
-    baseline_branch: str,
     consecutive_failures: int,
-    directory: str,
 ) -> None:
-    logger.error("Too many consecutive failures detected.")
-    logger.info("Keeping current iteration state for resuming...")
-    commit_if_needed(f"Iteration {iteration}: Work in progress (multiple failures)")
-    save_state(prefix, run, iteration, baseline_branch, STATE_DIR)
     logger.info("")
     logger.error("=" * 42)
     logger.error(f"ERROR: Too many consecutive failures ({consecutive_failures}).")
     logger.error("This likely indicates a persistent issue (e.g., rate limit, API error).")
-    logger.error("Stopping to prevent infinite retry loop.")
+    logger.error(f"Stopping at run {run}, iteration {iteration}.")
     logger.error("=" * 42)
-    logger.info("To resume the Claude session directly:")
-    logger.info(f"  claude --continue")
-    logger.info("")
-    logger.info(f"To continue the script later (will resume iteration {iteration}):")
-    logger.info(f"  cc-perf-analysis --continue {directory} {prefix}")
     sys.exit(4)
 
 
@@ -198,8 +119,6 @@ def main() -> None:
 
     prefix = args.prefix
     baseline_branch = args.baseline_branch
-    continue_mode = args.continue_mode
-    remaining_time_override = args.remaining_time
     use_plugin = args.use_plugin
 
     # Change into the project directory so all git/benchmark/Claude commands run there
@@ -207,33 +126,19 @@ def main() -> None:
     STATE_DIR = project_dir
 
     start_prompt_file = start_prompt_plugin_file if use_plugin else start_prompt_no_plugin_file
-    prompt_file = continue_prompt_file if continue_mode else start_prompt_file
-    if not prompt_file.exists():
-        logger.error(f"Prompt file '{prompt_file}' not found")
+    if not start_prompt_file.exists():
+        logger.error(f"Prompt file '{start_prompt_file}' not found")
         sys.exit(1)
 
-    prompt = prompt_file.read_text()
+    prompt = start_prompt_file.read_text()
 
-    start_run = 1
-    start_iteration = 1
-
-    if continue_mode:
-        start_run, start_iteration, baseline_branch = _handle_continue(prefix)
-    else:
-        _validate_fresh_run(baseline_branch)
-
-    _print_header(prefix, baseline_branch, continue_mode, start_run, start_iteration, use_plugin)
-
-    # Setup signal handlers with state context
-    current_state = {"run": start_run, "iteration": start_iteration}
+    _validate_fresh_run(baseline_branch)
+    _print_header(prefix, baseline_branch, use_plugin)
 
     def cleanup(signum, frame):
         logger.info("")
-        logger.info("Caught interrupt signal - saving state...")
-        commit_if_needed(f"Iteration {current_state['iteration']}: Interrupted")
-        save_state(prefix, current_state["run"], current_state["iteration"], baseline_branch, STATE_DIR)
+        logger.info("Caught interrupt signal - exiting...")
         subprocess.run(["pkill", "-P", str(os.getpid())], capture_output=True)
-        logger.info("State saved, cleanup complete")
         sys.exit(130)
 
     signal.signal(signal.SIGINT, cleanup)
@@ -242,54 +147,42 @@ def main() -> None:
     # Setup directory for benchmark CSV results
     benchmark_dir = str((Path(__file__).parent.parent.parent / "benchmark-results").resolve())
 
-    for run in range(start_run, TOTAL_RUNS + 1):
+    for run in range(1, TOTAL_RUNS + 1):
         logger.info("")
         logger.info(f"########## STARTING RUN {run} of {TOTAL_RUNS} ##########")
         logger.info(f"Time: {time.strftime('%c')}")
         logger.info("")
 
-        local_start_iteration = start_iteration if run == start_run else 1
+        branch_name = f"{prefix}-run-{run}-iteration-1"
+        result = run_git("checkout", baseline_branch, check=False)
+        if result.returncode != 0:
+            logger.error(f"Could not checkout baseline branch {baseline_branch}")
+            logger.error(f"Skipping run {run}")
+            continue
+        run_git("reset", "--hard", baseline_branch)
+        if branch_exists(branch_name):
+            run_git("branch", "-D", branch_name, check=False)
+        run_git("checkout", "-b", branch_name)
 
-        if local_start_iteration == 1:
-            branch_name = f"{prefix}-run-{run}-iteration-1"
-            result = run_git("checkout", baseline_branch, check=False)
-            if result.returncode != 0:
-                logger.error(f"Could not checkout baseline branch {baseline_branch}")
-                logger.error(f"Skipping run {run}")
-                continue
-            run_git("reset", "--hard", baseline_branch)
-            if branch_exists(branch_name):
-                run_git("branch", "-D", branch_name, check=False)
-            run_git("checkout", "-b", branch_name)
-
-            # Clean build after checking out baseline
-            logger.info("Running clean build after baseline checkout...")
-            build = subprocess.run(
-                ["./mvnw", "clean", "package"], capture_output=True, text=True
-            )
-            if build.returncode != 0:
-                logger.warning("Clean build failed after baseline checkout")
-                logger.info(build.stdout)
-                logger.info(build.stderr)
+        # Clean build after checking out baseline
+        logger.info("Running clean build after baseline checkout...")
+        build = subprocess.run(
+            ["./mvnw", "clean", "package"], capture_output=True, text=True
+        )
+        if build.returncode != 0:
+            logger.warning("Clean build failed after baseline checkout")
+            logger.info(build.stdout)
+            logger.info(build.stderr)
 
         # Run benchmarks before the run (iteration 0 = baseline)
         run_benchmarks(benchmark_dir, prefix, run, iteration=0)
         logger.info("")
 
-        if remaining_time_override and run == start_run:
-            # User specified remaining time - calculate backwards
-            run_start = time.time() - (TIMEOUT_SECONDS - remaining_time_override)
-        else:
-            # Normal case - start timer now
-            run_start = time.time()
+        run_start = time.time()
         consecutive_failures = 0
         max_consecutive_failures = 2
 
-        for iteration in range(local_start_iteration, ITERATIONS_PER_RUN + 1):
-            # Update state for signal handler
-            current_state["run"] = run
-            current_state["iteration"] = iteration
-
+        for iteration in range(1, ITERATIONS_PER_RUN + 1):
             logger.info("")
             logger.info(f"--- Run {run}, Iteration {iteration} ---")
             logger.info(f"Started: {time.strftime('%c')}")
@@ -305,7 +198,6 @@ def main() -> None:
                 )
                 break
 
-
             iteration_prompt = build_iteration_prompt(iteration, prompt, run)
 
             # Iteration execution with recovery on timeout
@@ -314,8 +206,8 @@ def main() -> None:
 
             # Create and checkout iteration branch
             iter_branch = f"{prefix}-run-{run}-iteration-{iteration}"
-            if iteration == local_start_iteration:
-                # Already on the correct branch (from run start or --continue)
+            if iteration == 1:
+                # Already on the correct branch from run start
                 logger.info(f"Working on branch {iter_branch}")
             else:
                 if branch_exists(iter_branch):
@@ -341,31 +233,18 @@ def main() -> None:
                     )
                     break  # Exit iteration loop entirely
 
-                # Use --continue only on first script resume (not on timeout retries)
-                use_continue = continue_mode
-
                 # Run Claude with iteration timeout
                 if recovery_attempts > 0:
                     logger.info(
                         f"Retry attempt {recovery_attempts}/{MAX_RECOVERY_ATTEMPTS}"
                     )
 
-                if use_continue:
-                    exit_code = run_claude_with_timeout(
-                        iteration_prompt,
-                        remaining,
-                        with_continue=True,
-                        iteration_timeout=ITERATION_TIMEOUT_SECONDS,
-                        use_plugin=use_plugin
-                    )
-                    continue_mode = False
-                else:
-                    exit_code = run_claude_with_timeout(
-                        iteration_prompt,
-                        remaining,
-                        iteration_timeout=ITERATION_TIMEOUT_SECONDS,
-                        use_plugin=use_plugin
-                    )
+                exit_code = run_claude_with_timeout(
+                    iteration_prompt,
+                    remaining,
+                    iteration_timeout=ITERATION_TIMEOUT_SECONDS,
+                    use_plugin=use_plugin
+                )
 
                 # Handle exit codes
                 if exit_code == 0:
@@ -376,9 +255,7 @@ def main() -> None:
 
                 elif exit_code == 2:
                     # Rate limit - exit immediately, no retry
-                    _handle_rate_limit(
-                        prefix, run, iteration, baseline_branch, project_dir
-                    )
+                    _handle_rate_limit(run, iteration)
 
                 elif exit_code == 124:
                     # Timeout detected - revert and retry same iteration
@@ -396,20 +273,14 @@ def main() -> None:
                         subprocess.run(["git", "clean", "-fd"], capture_output=True)
                         # Clear Claude memory before fresh retry
                         clear_claude_memory(project_dir, prefix, run)
-                        continue_mode = False
                         # Reset run timeout to start of this iteration so retries don't count
                         run_start = time.time() - pre_iteration_elapsed
                     else:
-                        # Exhausted recovery attempts - save state and stop
+                        # Exhausted recovery attempts - exit
                         logger.error(
                             f"Iteration {iteration} failed after {MAX_RECOVERY_ATTEMPTS} "
-                            f"retry attempts."
+                            f"retry attempts. Stopping."
                         )
-                        logger.error("Saving state and stopping program.")
-                        save_state(prefix, run, iteration, baseline_branch, STATE_DIR)
-                        logger.info("")
-                        logger.info(f"To resume later:")
-                        logger.info(f"  cc-perf-analysis --continue {project_dir} {prefix}")
                         sys.exit(5)
 
                 else:
@@ -423,8 +294,7 @@ def main() -> None:
 
                     if consecutive_failures >= max_consecutive_failures:
                         _handle_consecutive_failures(
-                            prefix, run, iteration, baseline_branch,
-                            consecutive_failures, project_dir
+                            run, iteration, consecutive_failures
                         )
 
                     _handle_single_failure(pre_iteration_commit, iteration)
@@ -444,7 +314,6 @@ def main() -> None:
         clear_claude_memory(project_dir, prefix, run)
         logger.info("")
 
-    clear_state(prefix, STATE_DIR)
     run_git("checkout", baseline_branch)
 
     # Clean build after final baseline checkout

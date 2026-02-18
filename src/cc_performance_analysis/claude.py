@@ -81,7 +81,6 @@ def build_iteration_prompt(iteration: int, base_prompt: str, run: int) -> str:
 def run_claude_with_timeout(
     prompt: str,
     timeout: int,
-    with_continue: bool = False,
     iteration_timeout: int | None = None,
     use_plugin: bool = True,
 ) -> int:
@@ -93,17 +92,10 @@ def run_claude_with_timeout(
     output_file = tempfile.mktemp(suffix=".txt")
 
     try:
-        if with_continue:
-            logger.info(f"Continuing Claude session")
-            cmd = ["claude", "--continue", *CLAUDE_FLAGS.split()]
-            if use_plugin:
-                cmd.extend(["--plugin-dir", _PLUGIN_DIR_RESOLVED])
-            cmd.extend(["-p", prompt])
-        else:
-            cmd = ["claude", *CLAUDE_FLAGS.split()]
-            if use_plugin:
-                cmd.extend(["--plugin-dir", _PLUGIN_DIR_RESOLVED])
-            cmd.extend(["-p", prompt])
+        cmd = ["claude", *CLAUDE_FLAGS.split()]
+        if use_plugin:
+            cmd.extend(["--plugin-dir", _PLUGIN_DIR_RESOLVED])
+        cmd.extend(["-p", prompt])
 
         with open(output_file, "w") as outf:
             proc = subprocess.Popen(
