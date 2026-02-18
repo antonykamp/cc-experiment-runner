@@ -39,7 +39,8 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output",
-        required=True,
+        type=Path,
+        default="./benchmark_results",
         help="Directory to write benchmark result CSVs to",
     )
     parser.add_argument(
