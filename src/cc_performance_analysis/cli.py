@@ -89,7 +89,7 @@ def _handle_continue(prefix: str) -> tuple[int, int, str]:
         clear_state(prefix, STATE_DIR)
         sys.exit(0)
 
-    last_branch = f"{prefix}-run-{state.run}"
+    last_branch = f"{prefix}-run-{state.run}-iteration-{state.iteration}"
     if branch_exists(last_branch):
         logger.info(f"Resuming from branch: {last_branch}")
         run_git("checkout", last_branch)
@@ -250,9 +250,8 @@ def main() -> None:
 
         local_start_iteration = start_iteration if run == start_run else 1
 
-        branch_name = f"{prefix}-run-{run}"
-
         if local_start_iteration == 1:
+            branch_name = f"{prefix}-run-{run}-iteration-1"
             result = run_git("checkout", baseline_branch, check=False)
             if result.returncode != 0:
                 logger.error(f"Could not checkout baseline branch {baseline_branch}")
@@ -313,12 +312,16 @@ def main() -> None:
             recovery_attempts = 0
             iteration_successful = False
 
-            # Create a snapshot branch before this iteration starts
+            # Create and checkout iteration branch
             iter_branch = f"{prefix}-run-{run}-iteration-{iteration}"
-            if branch_exists(iter_branch):
-                run_git("branch", "-D", iter_branch, check=False)
-            run_git("branch", iter_branch)
-            logger.info(f"Created branch {iter_branch}")
+            if iteration == local_start_iteration:
+                # Already on the correct branch (from run start or --continue)
+                logger.info(f"Working on branch {iter_branch}")
+            else:
+                if branch_exists(iter_branch):
+                    run_git("branch", "-D", iter_branch, check=False)
+                run_git("checkout", "-b", iter_branch)
+                logger.info(f"Created and checked out branch {iter_branch}")
 
             # Track commit before starting iteration for potential revert
             pre_iteration_commit = run_git("rev-parse", "HEAD").stdout.strip()
