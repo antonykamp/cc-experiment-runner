@@ -1,7 +1,7 @@
 """Configuration constants for the performance analysis."""
 
-ITERATIONS_PER_RUN = 5
-TOTAL_RUNS = 4
+ITERATIONS_PER_RUN = 1
+TOTAL_RUNS = 1
 TIMEOUT_SECONDS = 4 * 60 * 60  # 4 hours
 TIMEOUT_WARNING_THRESHOLD = 60  # seconds
 ITERATION_TIMEOUT_SECONDS = 1 * 60 * 60  # 1 hour per iteration
