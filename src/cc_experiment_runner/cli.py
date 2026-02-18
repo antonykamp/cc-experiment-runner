@@ -13,8 +13,6 @@ from cc_experiment_runner.claude import build_iteration_prompt, clear_claude_mem
 from cc_experiment_runner.config import (
     ITERATION_TIMEOUT_SECONDS,
     ITERATIONS_PER_RUN,
-    MAX_CONSECUTIVE_FAILURES,
-    MAX_RECOVERY_ATTEMPTS,
     TIMEOUT_SECONDS,
     TIMEOUT_WARNING_THRESHOLD,
     TOTAL_RUNS,
@@ -169,7 +167,6 @@ def main() -> None:
         logger.info("")
 
         run_start = time.time()
-        consecutive_failures = 0
 
         for iteration in range(1, ITERATIONS_PER_RUN + 1):
             logger.info("")
@@ -181,10 +178,6 @@ def main() -> None:
                 break
 
             iteration_prompt = build_iteration_prompt(iteration, prompt, run)
-
-            # Iteration execution with recovery on timeout
-            recovery_attempts = 0
-            iteration_successful = False
 
             # Create and checkout iteration branch
             iter_branch = f"{prefix}--run-{run}--iteration-{iteration}"
@@ -199,97 +192,47 @@ def main() -> None:
 
             # Track commit before starting iteration for potential revert
             pre_iteration_commit = run_git("rev-parse", "HEAD").stdout.strip()
-            # Track elapsed time before iteration for timeout reset on retry
-            pre_iteration_elapsed = time.time() - run_start
 
-            while recovery_attempts <= MAX_RECOVERY_ATTEMPTS and not iteration_successful:
-                remaining = _check_remaining_time(run_start)
-                if remaining is None:
-                    break
+            remaining = _check_remaining_time(run_start)
+            if remaining is None:
+                break
 
-                # Run Claude with iteration timeout
-                if recovery_attempts > 0:
-                    logger.info(
-                        f"Retry attempt {recovery_attempts}/{MAX_RECOVERY_ATTEMPTS}"
-                    )
+            exit_code = run_claude_with_timeout(
+                iteration_prompt,
+                remaining,
+                iteration_timeout=ITERATION_TIMEOUT_SECONDS,
+                use_plugin=use_plugin
+            )
 
-                exit_code = run_claude_with_timeout(
-                    iteration_prompt,
-                    remaining,
-                    iteration_timeout=ITERATION_TIMEOUT_SECONDS,
-                    use_plugin=use_plugin
-                )
-
-                # Handle exit codes
-                if exit_code == 0:
-                    # Success
-                    consecutive_failures = 0
-                    commit_if_needed(f"Iteration {iteration}: Uncommitted changes cleanup")
-                    iteration_successful = True
-
-                elif exit_code == 2:
-                    # Rate limit - exit immediately, no retry
-                    logger.info("")
-                    logger.error("Rate limit or API error detected.")
-                    logger.error(f"Stopping at run {run}, iteration {iteration}.")
-                    sys.exit(3)
-
-                elif exit_code == 124:
-                    # Timeout detected - revert and retry same iteration
-                    recovery_attempts += 1
-
-                    if recovery_attempts <= MAX_RECOVERY_ATTEMPTS:
-                        logger.warning(
-                            f"Iteration {iteration} timed out after "
-                            f"{ITERATION_TIMEOUT_SECONDS // 60} minutes "
-                            f"(attempt {recovery_attempts}/{MAX_RECOVERY_ATTEMPTS})"
-                        )
-                        # Revert all changes including any commits made during iteration
-                        logger.info(f"Reverting to commit {pre_iteration_commit[:8]} and retrying...")
-                        run_git("reset", "--hard", pre_iteration_commit, check=False)
-                        subprocess.run(["git", "clean", "-fd"], capture_output=True)
-                        # Clear Claude memory before fresh retry
-                        clear_claude_memory(project_dir, prefix, run)
-                        # Reset run timeout to start of this iteration so retries don't count
-                        run_start = time.time() - pre_iteration_elapsed
-                    else:
-                        # Exhausted recovery attempts - exit
-                        logger.error(
-                            f"Iteration {iteration} failed after {MAX_RECOVERY_ATTEMPTS} "
-                            f"retry attempts. Stopping."
-                        )
-                        sys.exit(5)
-
-                else:
-                    # Other errors
-                    consecutive_failures += 1
-                    logger.error(f"Error: Claude exited with code {exit_code}")
-                    logger.error(
-                        f"Consecutive failures: {consecutive_failures} of "
-                        f"{MAX_CONSECUTIVE_FAILURES}"
-                    )
-
-                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                        logger.info("")
-                        logger.error("=" * 42)
-                        logger.error(f"ERROR: Too many consecutive failures ({consecutive_failures}).")
-                        logger.error("This likely indicates a persistent issue (e.g., rate limit, API error).")
-                        logger.error(f"Stopping at run {run}, iteration {iteration}.")
-                        logger.error("=" * 42)
-                        sys.exit(4)
-
-                    run_git("reset", "--hard", pre_iteration_commit, check=False)
-                    subprocess.run(["git", "clean", "-fd"], capture_output=True)
-                    logger.warning(f"Iteration {iteration} skipped due to error at {time.strftime('%c')}")
-                    logger.info("")
-                    break  # Exit recovery loop
-
-            # Log completion and run benchmarks after successful iteration
-            if iteration_successful:
+            if exit_code == 0:
+                commit_if_needed(f"Iteration {iteration}: Uncommitted changes cleanup")
                 logger.info("")
                 logger.info(f"Completed iteration {iteration} at {time.strftime('%c')}")
                 logger.info("")
                 run_benchmarks(benchmark_dir, prefix, run, iteration=iteration)
+
+            elif exit_code == 2:
+                logger.info("")
+                logger.error("Rate limit or API error detected.")
+                logger.error(f"Stopping at run {run}, iteration {iteration}.")
+                sys.exit(3)
+
+            elif exit_code == 124:
+                logger.warning(
+                    f"Iteration {iteration} timed out after "
+                    f"{ITERATION_TIMEOUT_SECONDS // 60} minutes. "
+                    f"Reverting changes and continuing to next iteration."
+                )
+                run_git("reset", "--hard", pre_iteration_commit, check=False)
+                subprocess.run(["git", "clean", "-fd"], capture_output=True)
+                clear_claude_memory(project_dir, prefix, run)
+                run_benchmarks(benchmark_dir, prefix, run, iteration=iteration)
+
+            else:
+                logger.info("")
+                logger.error(f"Critical error: Claude exited with code {exit_code}.")
+                logger.error(f"Stopping at run {run}, iteration {iteration}.")
+                sys.exit(4)
 
         logger.info("")
         logger.info(f"########## COMPLETED RUN {run} ##########")
