@@ -153,7 +153,7 @@ def main() -> None:
         logger.info(f"Time: {time.strftime('%c')}")
         logger.info("")
 
-        branch_name = f"{prefix}-run-{run}-iteration-1"
+        branch_name = f"{prefix}--run-{run}--iteration-1"
         result = run_git("checkout", baseline_branch, check=False)
         if result.returncode != 0:
             logger.error(f"Could not checkout baseline branch {baseline_branch}")
@@ -205,7 +205,7 @@ def main() -> None:
             iteration_successful = False
 
             # Create and checkout iteration branch
-            iter_branch = f"{prefix}-run-{run}-iteration-{iteration}"
+            iter_branch = f"{prefix}--run-{run}--iteration-{iteration}"
             if iteration == 1:
                 # Already on the correct branch from run start
                 logger.info(f"Working on branch {iter_branch}")
