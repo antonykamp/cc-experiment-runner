@@ -3,7 +3,12 @@ name = "cc-performance-analysis"
 version = "0.1.0"
 description = "Autonomous Claude Code performance analysis runner"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "cc-bench-schema",
+]
+
+[tool.uv.sources]
+cc-bench-schema = { path = "../cc-bench-schema", editable = true }
 
 [project.scripts]
 cc-perf-analysis = "cc_performance_analysis.cli:main"

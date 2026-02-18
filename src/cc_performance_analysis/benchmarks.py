@@ -5,6 +5,7 @@ import re
 import subprocess
 from pathlib import Path
 
+from cc_bench_schema.benchmark import BENCHMARK_COLUMNS
 from cc_performance_analysis.config import (
     BENCHMARK_ORDER,
     BENCHMARKS,
@@ -58,7 +59,7 @@ def run_benchmarks(output_dir: str, prefix: str, run_num: int, iteration: int) -
         csv_file = output_path / f"{prefix}--run-{run_num}--iteration-{iteration}--{benchmark}.csv"
         with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["experiment_id", "run_id", "iteration_id", "outer_iteration_id", "runtime_us"])
+            writer.writerow(BENCHMARK_COLUMNS)
             for idx, runtime in enumerate(runtimes, start=1):
                 writer.writerow([prefix, run_num, iteration, idx, runtime])
 
