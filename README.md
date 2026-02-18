@@ -17,10 +17,10 @@ uv sync
 
 ```bash
 # Via the installed console script
-cc-perf-analysis <directory> <prefix> [baseline-branch]
+cc-run-experiments <directory> <prefix> [baseline-branch]
 
 # Or via uv run
-uv run cc-perf-analysis <directory> <prefix> [baseline-branch]
+uv run cc-run-experiments <directory> <prefix> [baseline-branch]
 
 # Or as a module
 uv run python -m cc_experiment_runner <directory> <prefix> [baseline-branch]
@@ -30,10 +30,10 @@ uv run python -m cc_experiment_runner <directory> <prefix> [baseline-branch]
 
 ```bash
 # Run with plugin enabled (default)
-cc-perf-analysis ../byopl24-02 2025-01-30--perf main
+cc-run-experiments ../byopl24-02 2025-01-30--perf main
 
 # Run without plugin
-cc-perf-analysis --no-plugin ../byopl24-02 2025-01-30--perf main
+cc-run-experiments --no-plugin ../byopl24-02 2025-01-30--perf main
 ```
 
 ## Parameters
@@ -58,7 +58,7 @@ cc-perf-analysis --no-plugin ../byopl24-02 2025-01-30--perf main
 
 ```mermaid
 flowchart TD
-    Start([cc-perf-analysis]) --> RunLoop[/"For each run (1..N)"/]
+    Start([cc-run-experiments]) --> RunLoop[/"For each run (1..N)"/]
 
     RunLoop --> IterLoop[/"For each iteration (1..M)"/]
 

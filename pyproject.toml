@@ -11,7 +11,7 @@ dependencies = [
 cc-bench-schema = { path = "../cc-bench-schema", editable = true }
 
 [project.scripts]
-cc-perf-analysis = "cc_experiment_runner.cli:main"
+cc-run-experiments = "cc_experiment_runner.cli:main"
 
 [build-system]
 requires = ["hatchling"]
