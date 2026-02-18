@@ -6,11 +6,11 @@ from datetime import datetime
 def setup_logger(log_file=None):
     """Sets up and returns a logger instance with a rotating file handler.
 
-    Logs are ALWAYS written to the cc-performance-analysis/logs directory
+    Logs are ALWAYS written to the cc-experiment-runner/logs directory
     regardless of current working directory.
     """
 
-    # ALWAYS use cc-performance-analysis/logs directory
+    # ALWAYS use cc-experiment-runner/logs directory
     cc_project_dir = Path(__file__).parent.parent.parent.resolve()
     cc_logs_dir = (cc_project_dir / "logs").resolve()
     cc_logs_dir.mkdir(parents=True, exist_ok=True)

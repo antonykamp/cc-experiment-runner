@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from cc_performance_analysis.logger import logger
+from cc_experiment_runner.logger import logger
 
 
 @dataclass

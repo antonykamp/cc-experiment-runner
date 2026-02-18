@@ -6,11 +6,11 @@ import subprocess
 from pathlib import Path
 
 from cc_bench_schema.benchmark import BENCHMARK_COLUMNS
-from cc_performance_analysis.config import (
+from cc_experiment_runner.config import (
     BENCHMARK_ORDER,
     BENCHMARKS,
 )
-from cc_performance_analysis.logger import logger
+from cc_experiment_runner.logger import logger
 
 
 def run_benchmarks(output_dir: str, prefix: str, run_num: int, iteration: int) -> bool:

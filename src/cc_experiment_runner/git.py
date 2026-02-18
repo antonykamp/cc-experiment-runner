@@ -1,7 +1,7 @@
 """Git helper functions."""
 
 import subprocess
-from cc_performance_analysis.logger import logger
+from cc_experiment_runner.logger import logger
 
 
 def run_git(*args: str, check: bool = True) -> subprocess.CompletedProcess:

@@ -15,7 +15,7 @@ import threading
 import time
 from pathlib import Path
 
-from cc_performance_analysis.config import (
+from cc_experiment_runner.config import (
     CLAUDE_FLAGS,
     ITERATIONS_PER_RUN,
     PLUGIN_DIR,
@@ -24,8 +24,8 @@ from cc_performance_analysis.config import (
 )
 
 _PLUGIN_DIR_RESOLVED = str(Path(PLUGIN_DIR).expanduser())
-from cc_performance_analysis.process import terminate_process
-from cc_performance_analysis.logger import logger
+from cc_experiment_runner.process import terminate_process
+from cc_experiment_runner.logger import logger
 
 _RATE_LIMIT_PATTERN = re.compile(
     r"No messages returned|promise rejected|rate limit exceeded"

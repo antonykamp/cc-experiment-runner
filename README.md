@@ -9,7 +9,7 @@
 ## Installation
 
 ```bash
-cd cc-performance-analysis
+cd cc-experiment-runner
 uv sync
 ```
 
@@ -23,7 +23,7 @@ cc-perf-analysis <directory> <prefix> [baseline-branch]
 uv run cc-perf-analysis <directory> <prefix> [baseline-branch]
 
 # Or as a module
-uv run python -m cc_performance_analysis <directory> <prefix> [baseline-branch]
+uv run python -m cc_experiment_runner <directory> <prefix> [baseline-branch]
 ```
 
 **Examples:**
@@ -96,7 +96,7 @@ flowchart TD
 
 ## Configuration
 
-Default settings in `src/cc_performance_analysis/config.py`:
+Default settings in `src/cc_experiment_runner/config.py`:
 - **Iterations per run**: 10
 - **Total runs**: 5
 - **Timeout per run**: 2 hours
@@ -155,11 +155,11 @@ cc-perf-analysis --continue ../byopl24-02 2025-01-30--opt
 ## Project Structure
 
 ```
-cc-performance-analysis/
+cc-experiment-runner/
 ├── pyproject.toml
 ├── README.md
 └── src/
-    └── cc_performance_analysis/
+    └── cc_experiment_runner/
         ├── __init__.py
         ├── __main__.py        # python -m entry point
         ├── cli.py             # argument parsing and main orchestration

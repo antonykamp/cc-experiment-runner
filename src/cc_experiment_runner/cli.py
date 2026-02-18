@@ -8,9 +8,9 @@ import sys
 import time
 from pathlib import Path
 
-from cc_performance_analysis.benchmarks import run_benchmarks
-from cc_performance_analysis.claude import build_iteration_prompt, clear_claude_memory, run_claude_with_timeout
-from cc_performance_analysis.config import (
+from cc_experiment_runner.benchmarks import run_benchmarks
+from cc_experiment_runner.claude import build_iteration_prompt, clear_claude_memory, run_claude_with_timeout
+from cc_experiment_runner.config import (
     ITERATION_TIMEOUT_SECONDS,
     ITERATIONS_PER_RUN,
     MAX_RECOVERY_ATTEMPTS,
@@ -18,8 +18,8 @@ from cc_performance_analysis.config import (
     TIMEOUT_WARNING_THRESHOLD,
     TOTAL_RUNS,
 )
-from cc_performance_analysis.git import branch_exists, commit_if_needed, has_uncommitted_changes, run_git
-from cc_performance_analysis.logger import logger
+from cc_experiment_runner.git import branch_exists, commit_if_needed, has_uncommitted_changes, run_git
+from cc_experiment_runner.logger import logger
 
 STATE_DIR = Path.cwd().resolve()
 
