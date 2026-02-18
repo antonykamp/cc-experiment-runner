@@ -10,6 +10,7 @@ from pathlib import Path
 
 from cc_experiment_runner.benchmarks import run_benchmarks
 from cc_experiment_runner.claude import build_iteration_prompt, clear_claude_memory, run_claude_with_timeout
+from cc_experiment_runner.manifest import add_benchmark_files, finalize_manifest, init_manifest
 from cc_experiment_runner.config import (
     ITERATION_TIMEOUT_SECONDS,
     ITERATIONS_PER_RUN,
@@ -137,6 +138,7 @@ def main() -> None:
 
     # Setup directory for benchmark CSV results
     benchmark_dir = str((Path(__file__).parent.parent.parent / "benchmark-results").resolve())
+    manifest_path = init_manifest(Path(benchmark_dir), prefix, baseline_branch)
 
     for run in range(1, TOTAL_RUNS + 1):
         logger.info("")
@@ -158,7 +160,8 @@ def main() -> None:
         _run_build("after baseline checkout")
 
         # Run benchmarks before the run (iteration 0 = baseline)
-        run_benchmarks(benchmark_dir, prefix, run, iteration=0)
+        baseline_files = run_benchmarks(benchmark_dir, prefix, run, iteration=0)
+        add_benchmark_files(manifest_path, run, 0, baseline_files)
         logger.info("")
 
         run_start = time.time()
@@ -282,7 +285,8 @@ def main() -> None:
                 logger.info("")
                 logger.info(f"Completed iteration {iteration} at {time.strftime('%c')}")
                 logger.info("")
-                run_benchmarks(benchmark_dir, prefix, run, iteration=iteration)
+                iter_files = run_benchmarks(benchmark_dir, prefix, run, iteration=iteration)
+                add_benchmark_files(manifest_path, run, iteration, iter_files)
 
         logger.info("")
         logger.info(f"########## COMPLETED RUN {run} ##########")
@@ -294,6 +298,8 @@ def main() -> None:
     run_git("checkout", baseline_branch)
 
     _run_build("after final baseline checkout")
+
+    finalize_manifest(manifest_path)
 
     logger.info("")
     logger.info("=== Analysis Complete ===")

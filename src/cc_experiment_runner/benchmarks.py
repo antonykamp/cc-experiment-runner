@@ -13,7 +13,7 @@ from cc_experiment_runner.config import (
 from cc_experiment_runner.logger import logger
 
 
-def run_benchmarks(output_dir: str, prefix: str, run_num: int, iteration: int) -> bool:
+def run_benchmarks(output_dir: str, prefix: str, run_num: int, iteration: int) -> dict[str, str]:
     """Run all benchmarks and save results as CSV files.
 
     Args:
@@ -21,6 +21,10 @@ def run_benchmarks(output_dir: str, prefix: str, run_num: int, iteration: int) -
         prefix: experiment ID (e.g. 2026-02-15--a-s4--3)
         run_num: run number (1-4)
         iteration: Claude iteration number (0 = before first, 1-5 = after each)
+
+    Returns:
+        Mapping of {benchmark_name: csv_filename} for successfully written files.
+        Empty dict on build failure.
     """
     logger.info(f"--- Running benchmarks for run {run_num}, iteration {iteration} ---")
 
@@ -29,10 +33,12 @@ def run_benchmarks(output_dir: str, prefix: str, run_num: int, iteration: int) -
     )
     if build.returncode != 0:
         logger.warning(f"Build failed, skipping benchmarks for run {run_num}")
-        return False
+        return {}
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+
+    written_files: dict[str, str] = {}
 
     for benchmark in BENCHMARK_ORDER:
         logger.info(f"  Running {benchmark}...")
@@ -56,7 +62,8 @@ def run_benchmarks(output_dir: str, prefix: str, run_num: int, iteration: int) -
             logger.warning(f"  No runtime values found for {benchmark}")
             continue
 
-        csv_file = output_path / f"{prefix}--run-{run_num}--iteration-{iteration}--{benchmark}.csv"
+        csv_filename = f"{prefix}--run-{run_num}--iteration-{iteration}--{benchmark}.csv"
+        csv_file = output_path / csv_filename
         with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(BENCHMARK_COLUMNS)
@@ -64,6 +71,7 @@ def run_benchmarks(output_dir: str, prefix: str, run_num: int, iteration: int) -
                 writer.writerow([prefix, run_num, iteration, idx, runtime])
 
         logger.info(f"  Wrote {csv_file}")
+        written_files[benchmark] = csv_filename
 
     logger.info(f"--- Benchmarks complete for run {run_num}, iteration {iteration} ---")
-    return True
+    return written_files
