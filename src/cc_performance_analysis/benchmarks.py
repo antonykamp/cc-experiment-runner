@@ -55,7 +55,7 @@ def run_benchmarks(output_dir: str, prefix: str, run_num: int, iteration: int) -
             logger.warning(f"  No runtime values found for {benchmark}")
             continue
 
-        csv_file = output_path / f"{prefix}--{run_num}--{iteration}--{benchmark}.csv"
+        csv_file = output_path / f"{prefix}--run-{run_num}--iteration-{iteration}--{benchmark}.csv"
         with open(csv_file, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["experiment_id", "run_id", "iteration_id", "outer_iteration_id", "runtime_us"])

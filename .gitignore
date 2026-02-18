@@ -8,3 +8,6 @@ build/
 .state-*
 uv.lock
 logs/
+benchmark-results/
+.DS_Store
+.jj/
