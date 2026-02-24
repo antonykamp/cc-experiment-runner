@@ -10,6 +10,7 @@ from pathlib import Path
 
 from cc_experiment_runner.benchmarks import run_benchmarks
 from cc_experiment_runner.claude import build_iteration_prompt, clear_claude_memory, run_claude_with_timeout
+from cc_experiment_runner.diffstats import compute_diffstats, write_diffstats_row
 from cc_experiment_runner.config import (
     ITERATION_TIMEOUT_SECONDS,
     ITERATIONS_PER_RUN,
@@ -164,6 +165,8 @@ def main() -> None:
 
         # Run benchmarks before the run (iteration 0 = baseline)
         run_benchmarks(benchmark_dir, prefix, run, iteration=0)
+        zero_stats = {k: 0 for k in ("src_added", "src_removed", "md_added", "md_removed", "total_added", "total_removed")}
+        write_diffstats_row(benchmark_dir, prefix, run, iteration=0, stats=zero_stats)
         logger.info("")
 
         run_start = time.time()
@@ -206,6 +209,8 @@ def main() -> None:
 
             if exit_code == 0:
                 commit_if_needed(f"Iteration {iteration}: Uncommitted changes cleanup")
+                diff_stats = compute_diffstats(pre_iteration_commit)
+                write_diffstats_row(benchmark_dir, prefix, run, iteration=iteration, stats=diff_stats)
                 logger.info("")
                 logger.info(f"Completed iteration {iteration} at {time.strftime('%c')}")
                 logger.info("")
@@ -226,6 +231,7 @@ def main() -> None:
                 run_git("reset", "--hard", pre_iteration_commit, check=False)
                 subprocess.run(["git", "clean", "-fd"], capture_output=True)
                 clear_claude_memory(project_dir, prefix, run)
+                write_diffstats_row(benchmark_dir, prefix, run, iteration=iteration, stats=zero_stats)
                 run_benchmarks(benchmark_dir, prefix, run, iteration=iteration)
 
             else:
