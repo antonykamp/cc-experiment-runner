@@ -1,6 +1,7 @@
 __pycache__/
 examples/
 *.pyc
+*.pyo
 .venv/
 *.egg-info/
 dist/
@@ -11,3 +12,10 @@ logs/
 benchmark-results/
 .DS_Store
 .jj/
+.pytest_cache/
+.mypy_cache/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

@@ -8,7 +8,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-cc-bench-schema = { path = "../cc-bench-schema", editable = true }
+cc-bench-schema = { git = "https://github.com/antonykamp/cc-bench-schema.git" }
 
 [project.scripts]
 cc-run-experiments = "cc_experiment_runner.cli:main"

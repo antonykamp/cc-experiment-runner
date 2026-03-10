@@ -1,5 +1,7 @@
 """Configuration constants for the performance analysis."""
 
+import os
+
 ITERATIONS_PER_RUN = 1
 TOTAL_RUNS = 3
 TIMEOUT_SECONDS = 2 * 60 * 60 # 4 hours
@@ -8,7 +10,7 @@ ITERATION_TIMEOUT_SECONDS = int(2 * 60 * 60)  # 1.5 hours per iteration
 STARTUP_DELAY = 1
 TERMINATION_GRACE_PERIOD = 5
 
-PLUGIN_DIR = "~/Projects/hpi-ma/cc-truffle-performance-plugin"
+PLUGIN_DIR = os.environ.get("CC_PLUGIN_DIR", "")
 CLAUDE_FLAGS = "--dangerously-skip-permissions"
 
 BENCHMARK_ORDER = [

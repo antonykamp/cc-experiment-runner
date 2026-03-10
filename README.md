@@ -99,6 +99,14 @@ Default settings in `src/cc_experiment_runner/config.py`:
 - **Total runs**: 5
 - **Timeout per run**: 2 hours
 
+### Environment Variables
+
+- `CC_PLUGIN_DIR` - Path to the Truffle performance plugin directory. Required when running with plugin enabled (the default). Example: `export CC_PLUGIN_DIR=~/Projects/cc-truffle-performance-plugin`
+
+### Claude CLI Permissions
+
+The runner invokes `claude` with the `--dangerously-skip-permissions` flag. This is required because the experiment runner operates autonomously across multiple iterations without user interaction. The flag allows Claude to execute tools (file edits, shell commands, git operations) without prompting for confirmation at each step. **Only use this tool in sandboxed or trusted environments**, as it gives Claude unrestricted access to the project directory.
+
 ## Output
 
 - **Branches**: One per iteration (`<prefix>-run-<N>-iteration-<M>`)
